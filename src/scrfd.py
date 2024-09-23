@@ -80,7 +80,7 @@ class SCRFD():
             preds.append(py)
         return np.stack(preds, axis=-1)
 
-    def detect(self, srcimg: np.ndarray):
+    def detect(self, srcimg: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         检测图片中的人脸并返回检测结果
         流程：
@@ -143,7 +143,7 @@ class SCRFD():
 
     def draw(self, srcimg: np.ndarray, bboxes: np.ndarray, kpss: np.ndarray, scores: np.ndarray):
         """
-        根据检测结果绘制人脸检测的框和关键点
+        根据检测结果在原始图片上绘制人脸检测的框和关键点
         :param srcimg: 原始图片
         :param bboxes: 检测到的边界框
         :param kpss: 检测到的关键点
@@ -153,16 +153,14 @@ class SCRFD():
         for i in range(bboxes.shape[0]):
             xmin, ymin, xamx, ymax = int(bboxes[i, 0]), int(bboxes[i, 1]), int(bboxes[i, 0] + bboxes[i, 2]), int(
                 bboxes[i, 1] + bboxes[i, 3])
+            # 绘制边界框
             cv2.rectangle(srcimg, (xmin, ymin), (xamx, ymax), (0, 0, 255), thickness=2)
-
-            # Draw keypoints
+            # 绘制关键点
             for j in range(5):
                 cv2.circle(srcimg, (int(kpss[i, j, 0]), int(kpss[i, j, 1])), 1, (0, 255, 0), thickness=-1)
-
-            # Draw score
+            # 绘制分数
             cv2.putText(srcimg, str(round(scores[i], 3)), (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0),
                         thickness=1)
-
         return srcimg
 
 
