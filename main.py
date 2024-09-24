@@ -46,37 +46,36 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
         print(f"[INFO] Image saved to: {output_path}")
 
     elif is_video_file(str(file_path)):
-        cap = cv2.VideoCapture(str(file_path))
+        cap = cv2.VideoCapture(str(file_path))  # 打开视频文件
+        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
         interval = 1
         standard = 60  # 设定的标准帧数量
         processed_frames = 0
         update_interval = 10  # 更新进度条
 
-        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if save:
+            output_path = result_dir / (file_path.stem + ".mp4")
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 四字符编码
+            video = cv2.VideoWriter(str(output_path), fourcc, cap.get(cv2.CAP_PROP_FPS), (640, 360))
 
         while cap.isOpened():
             ret, srcimg = cap.read()  # 每次读取一帧
+
             if not ret:
                 break  # 如果没有读取到帧，退出
 
-            if save:
-                output_path = result_dir / (Path(file_path).stem + ".mp4")
-                video = cv2.VideoWriter(str(output_path), cv2.VideoWriter_fourcc(*'mp4v'), cap.get(cv2.CAP_PROP_FPS),
-                                        (frame_width, frame_height))
+            # 缩放到 640x360
+            srcimg = cv2.resize(srcimg, (640, 360))
 
             bboxes, kpss, scores = detector.detect(srcimg)  # 检测人脸
             tracker.update(bboxes, kpss, scores)  # 更新追踪器
 
-            boxes = []
-            kpss = []
-            ids = []
-            for student in tracker.student_trackers:
-                boxes.append(student.bbox)
-                kpss.append(student.kps)
-                ids.append(student.id)
+            boxes = [student.bbox for student in tracker.student_trackers]
+            kpss = [student.kps for student in tracker.student_trackers]
+            ids = [student.id for student in tracker.student_trackers]
 
             outimg = detector.draw(srcimg, np.array(boxes), np.array(kpss), np.array(ids))  # 绘制人脸框
 
@@ -89,7 +88,7 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
                 break
 
         cap.release()  # 释放视频捕获对象
-        if args.save:
+        if save:
             video.release()  # 释放视频写入对象
             print(f"[INFO] Video saved to: {output_path}")
 
@@ -171,7 +170,7 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
         # print(f"[INFO] Video saved to: {output_path}")
 
 
-def main(input_path, onnxmodel_path, result_dir=Path("result"), prob_threshold=0.5, nms_threshold=0.4):
+def main(input_path, onnxmodel_path, result_dir=Path("result"), prob_threshold=0.5, nms_threshold=0.4, save=False):
     # if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
     #     print(f"[ERROR] File does not exist: {dir_path}")
     #     return
@@ -190,12 +189,12 @@ def main(input_path, onnxmodel_path, result_dir=Path("result"), prob_threshold=0
     #     if entry.is_file():
     #         process_file(entry, detector, result_dir)
 
-    process_file(Path(input_path), detector, Path(result_dir))
+    process_file(Path(input_path), detector, Path(result_dir), save=save)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=str, default="data/classroom.mp4", help="input image or video path")
+    parser.add_argument("--input", type=str, default="data/classroom_20s.mp4", help="input image or video path")
     parser.add_argument("--onnxmodel", type=str, default="weights/scrfd_10g_kps.onnx", help="onnx model path")
     parser.add_argument("--prob_threshold", type=float, default=0.5, help="face detection probability threshold")
     parser.add_argument("--nms_threshold", type=float, default=0.4, help="non-maximum suppression threshold")
@@ -206,4 +205,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
 
-    main(args.input, args.onnxmodel, args.result_dir, args.confThreshold, args.nmsThreshold)
+    main(args.input, args.onnxmodel, args.result_dir, args.confThreshold, args.nmsThreshold, save=args.save)

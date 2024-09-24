@@ -154,7 +154,7 @@ class SCRFD():
             xmin, ymin, xamx, ymax = int(bboxes[i, 0]), int(bboxes[i, 1]), int(bboxes[i, 0] + bboxes[i, 2]), int(
                 bboxes[i, 1] + bboxes[i, 3])
             # 绘制边界框
-            cv2.rectangle(srcimg, (xmin, ymin), (xamx, ymax), (0, 0, 255), thickness=2)
+            cv2.rectangle(srcimg, (xmin, ymin), (xamx, ymax), (0, 0, 255), thickness=1)
             # 绘制关键点
             for j in range(5):
                 cv2.circle(srcimg, (int(kpss[i, j, 0]), int(kpss[i, j, 1])), 1, (0, 255, 0), thickness=-1)
@@ -167,7 +167,7 @@ class SCRFD():
 if __name__ == '__main__':
     # example usage: python scrfd.py --input ../data/selfie.jpg --save True --output detection --output_dir ../result
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input', type=str, default='../data/selfie.jpg', help='image or video path')
+    parser.add_argument('--input', type=str, default='../data/classroom_20s.mp4', help='image or video path')
     parser.add_argument('--onnxmodel', default='../weights/scrfd_10g_kps.onnx', type=str,
                         choices=['../weights/scrfd_500m_kps.onnx', '../weights/scrfd_2.5g_kps.onnx',
                                  '../weights/scrfd_10g_kps.onnx'], help='onnx model')
