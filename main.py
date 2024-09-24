@@ -7,6 +7,7 @@ import argparse
 from src.scrfd import SCRFD
 from src.utils import is_image_file, is_video_file, print_progress_bar
 from src.cluster import cluster_faces_for_id
+from src.my_tracker import Tracker
 
 clustering_done = False
 initial_face_boxes = []  # 存储初始检测框
@@ -16,6 +17,8 @@ face_tracker_ids = {}  # 存储每个追踪器对应的ID
 
 
 def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False) -> None:
+    tracker = Tracker()  # 追踪器初始化
+
     if is_image_file(str(file_path)):
         img = cv2.imread(str(file_path))
         print(f"[INFO] Processing image: {file_path}")
@@ -23,8 +26,19 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
             print(f"[ERROR] cv2.imread {file_path} failed")
             return
 
-        face_objects = detector.detect(img)
-        detector.draw(img, *face_objects)  # 绘制人脸框
+        bboxes, kpss, scores = detector.detect(img)
+        tracker.update(bboxes, kpss, scores)  # 更新追踪器
+
+        # cv2.imshow("ID Map", id_map)
+        # cv2.imshow("Width/Height Map", width_height_map)
+        # cv2.waitKey(0)
+
+        # 获取每个框的信息
+        boxes = [student.bbox for student in tracker.student_trackers]
+        kpss = [student.kps for student in tracker.student_trackers]
+        ids = [student.id for student in tracker.student_trackers]
+
+        detector.draw(img, np.array(boxes), np.array(kpss), np.array(ids))  # 绘制人脸框
 
         output_path = result_dir / (file_path.stem + ".png")
         cv2.imwrite(str(output_path), img)
@@ -54,7 +68,17 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
                                         (frame_width, frame_height))
 
             bboxes, kpss, scores = detector.detect(srcimg)  # 检测人脸
-            outimg = detector.draw(srcimg, bboxes, kpss, scores)  # 绘制检测结果
+            tracker.update(bboxes, kpss, scores)  # 更新追踪器
+
+            boxes = []
+            kpss = []
+            ids = []
+            for student in tracker.student_trackers:
+                boxes.append(student.bbox)
+                kpss.append(student.kps)
+                ids.append(student.id)
+
+            outimg = detector.draw(srcimg, np.array(boxes), np.array(kpss), np.array(ids))  # 绘制人脸框
 
             cv2.imshow('Deep learning object detection in OpenCV', outimg)  # 显示检测结果
 
