@@ -3,11 +3,12 @@ import cv2
 import numpy as np
 from pathlib import Path
 import argparse
+import time
 
 from src.scrfd import SCRFD
 from src.utils import is_image_file, is_video_file, print_progress_bar
 from src.cluster import cluster_faces_for_id
-from src.my_tracker import Tracker
+from src.classroom import Classroom
 
 clustering_done = False
 initial_face_boxes = []  # 存储初始检测框
@@ -17,9 +18,12 @@ face_tracker_ids = {}  # 存储每个追踪器对应的ID
 
 
 def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False) -> None:
-    tracker = Tracker()  # 追踪器初始化
+    classroom = Classroom()  # 追踪器初始化
 
     if is_image_file(str(file_path)):
+        # -------------------------------------检测人脸-------------------------------------------------#
+        start_time = time.time()
+
         img = cv2.imread(str(file_path))
         print(f"[INFO] Processing image: {file_path}")
         if img is None:
@@ -27,16 +31,18 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
             return
 
         bboxes, kpss, scores = detector.detect(img)
-        tracker.update(bboxes, kpss, scores)  # 更新追踪器
 
-        # cv2.imshow("ID Map", id_map)
-        # cv2.imshow("Width/Height Map", width_height_map)
-        # cv2.waitKey(0)
+        print(f"检测用时：{time.time() - start_time:.3f}s")
+        # ---------------------------------------------------------------------------------------------#
+
+        # 排序人脸框
+
+        classroom.update(bboxes, kpss, scores)  # 更新教室信息
 
         # 获取每个框的信息
-        boxes = [student.bbox for student in tracker.student_trackers]
-        kpss = [student.kps for student in tracker.student_trackers]
-        ids = [student.id for student in tracker.student_trackers]
+        boxes = [student.bbox for student in classroom.students]
+        kpss = [student.kps for student in classroom.students]
+        ids = [student.ID.id for student in classroom.students]
 
         detector.draw(img, np.array(boxes), np.array(kpss), np.array(ids))  # 绘制人脸框
 
@@ -71,11 +77,11 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
             srcimg = cv2.resize(srcimg, (640, 360))
 
             bboxes, kpss, scores = detector.detect(srcimg)  # 检测人脸
-            tracker.update(bboxes, kpss, scores)  # 更新追踪器
+            classroom.update(bboxes, kpss, scores)  # 更新追踪器
 
-            boxes = [student.bbox for student in tracker.student_trackers]
-            kpss = [student.kps for student in tracker.student_trackers]
-            ids = [student.id for student in tracker.student_trackers]
+            boxes = [student.bbox for student in classroom.students]
+            kpss = [student.kps for student in classroom.students]
+            ids = [student.ID.id for student in classroom.students]
 
             outimg = detector.draw(srcimg, np.array(boxes), np.array(kpss), np.array(ids))  # 绘制人脸框
 
@@ -185,11 +191,12 @@ def main(input_path, onnxmodel_path, result_dir=Path("result"), prob_threshold=0
 
     detector = SCRFD(onnxmodel_path, prob_threshold, nms_threshold)
 
-    # for entry in Path(dir_path).iterdir():  # 遍历目录
-    #     if entry.is_file():
-    #         process_file(entry, detector, result_dir)
-
-    process_file(Path(input_path), detector, Path(result_dir), save=save)
+    if os.path.isfile(input_path):  # 如果输入的是文件
+        process_file(Path(input_path), detector, Path(result_dir), save=save)
+    else:  # 如果输入的是目录
+        for entry in Path(input_path).iterdir():  # 遍历目录
+            if entry.is_file():
+                process_file(Path(entry), detector, Path(result_dir), save=save)
 
 
 if __name__ == "__main__":

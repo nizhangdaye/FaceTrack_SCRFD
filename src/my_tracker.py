@@ -1,3 +1,9 @@
+"""
+ID 重新赋值时，存在 ID 空间变化大的结果
+对所有 ID 待定检测框进行综合判定根据检测框尺寸、位置、以及现有ID占用情况决定各个检测框ID
+检测框碰撞（透视），框大的在前，ID 更小
+"""
+
 import numpy as np
 import cv2
 from scipy.optimize import linear_sum_assignment
@@ -20,9 +26,9 @@ class StudentTracker:
 
         # Kalman filter initialization
         self.kf = cv2.KalmanFilter(7, 4)  # 状态维数为7，测量维数为4
-        self.kf.transitionMatrix = np.array([[1, 0, 0, 0, 0.5, 0, 0],
-                                             [0, 1, 0, 0, 0, 0.5, 0],
-                                             [0, 0, 1, 0, 0, 0, 0.5],
+        self.kf.transitionMatrix = np.array([[1, 0, 0, 0, 1, 0, 0],
+                                             [0, 1, 0, 0, 0, 1, 0],
+                                             [0, 0, 1, 0, 0, 0, 1],
                                              [0, 0, 0, 1, 0, 0, 0],
                                              [0, 0, 0, 0, 1, 0, 0],
                                              [0, 0, 0, 0, 0, 1, 0],
@@ -102,7 +108,7 @@ class StudentTracker:
 
 
 class Tracker:
-    def __init__(self, max_inactive_frames=15):
+    def __init__(self, max_inactive_frames=20):
         self.id_map = np.zeros((640, 360), dtype=np.uint8)
         self.id_width_height_map = np.zeros((640, 360), dtype=np.float32)
         self.student_trackers = []
@@ -144,8 +150,8 @@ class Tracker:
         # 匹配当前帧的检测与现有的跟踪器
         matches = match_detections_to_trackers(self.student_trackers, current_detections)
 
-        # 处理匹配的检测框
         matched_detections = set([m[1] for m in matches])
+        # 处理匹配的检测框
         for match in matches:
             tracker_index, detection_index = match
             tracker = self.student_trackers[tracker_index]
@@ -190,6 +196,9 @@ class Tracker:
 
 
 def compute_cost_matrix(trackers, detections):
+    """
+    使用 IoU 计算匹配成本矩阵
+    """
     num_trackers = len(trackers)
     num_detections = len(detections)
     cost_matrix = np.zeros((num_trackers, num_detections))
@@ -200,13 +209,16 @@ def compute_cost_matrix(trackers, detections):
     return cost_matrix
 
 
-def match_detections_to_trackers(trackers, detections, threshold=50):
-    cost_matrix = compute_cost_matrix(trackers, detections)
-    row_ind, col_ind = linear_sum_assignment(cost_matrix, maximize=False)
+def match_detections_to_trackers(trackers, detections, threshold=1.0):
+    """
+    使用 Hungarian 算法匹配检测框与跟踪器
+    """
+    cost_matrix = compute_cost_matrix(trackers, detections)  # 计算匹配成本矩阵
+    row_ind, col_ind = linear_sum_assignment(cost_matrix, maximize=False)  # 使用 Hungarian 算法匹配
     matches = []
 
     for r, c in zip(row_ind, col_ind):
-        if cost_matrix[r, c] < threshold:  # 可以调整这个阈值
+        if cost_matrix[r, c] < threshold:
             matches.append((r, c))
 
     return matches
