@@ -155,9 +155,9 @@ class SCRFD():
                 bboxes[i, 1] + bboxes[i, 3])
             # 绘制边界框
             cv2.rectangle(srcimg, (xmin, ymin), (xamx, ymax), (0, 0, 255), thickness=1)
-            # 绘制关键点
-            for j in range(5):
-                cv2.circle(srcimg, (int(kpss[i, j, 0]), int(kpss[i, j, 1])), 1, (0, 255, 0), thickness=-1)
+            # # 绘制关键点
+            # for j in range(5):
+            #     cv2.circle(srcimg, (int(kpss[i, j, 0]), int(kpss[i, j, 1])), 1, (0, 255, 0), thickness=-1)
             # 绘制分数
             cv2.putText(srcimg, str(round(scores[i], 3)), (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0),
                         thickness=1)

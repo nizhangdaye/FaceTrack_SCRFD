@@ -185,11 +185,13 @@ def main(input_path, onnxmodel_path, result_dir=Path("result"), prob_threshold=0
 
     detector = SCRFD(onnxmodel_path, prob_threshold, nms_threshold)
 
-    # for entry in Path(dir_path).iterdir():  # 遍历目录
-    #     if entry.is_file():
-    #         process_file(entry, detector, result_dir)
+    if os.path.isfile(input_path):  # 如果输入的是文件
+        process_file(Path(input_path), detector, Path(result_dir), save=save)
+    else:  # 如果输入的是目录
+        for entry in Path(input_path).iterdir():  # 遍历目录
+            if entry.is_file():
+                process_file(Path(entry), detector, Path(result_dir), save=save)
 
-    process_file(Path(input_path), detector, Path(result_dir), save=save)
 
 
 if __name__ == "__main__":
@@ -206,3 +208,5 @@ if __name__ == "__main__":
     print(args)
 
     main(args.input, args.onnxmodel, args.result_dir, args.confThreshold, args.nmsThreshold, save=args.save)
+
+
