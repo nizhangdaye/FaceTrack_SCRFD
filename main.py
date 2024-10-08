@@ -9,6 +9,8 @@ from src.utils import is_image_file, is_video_file, print_progress_bar
 from src.cluster import cluster_faces_for_id
 from src.my_tracker import Tracker
 
+import time
+
 clustering_done = False
 initial_face_boxes = []  # 存储初始检测框
 clustered_rects = []  # 存储聚类后的检测框
@@ -19,14 +21,23 @@ face_tracker_ids = {}  # 存储每个追踪器对应的ID
 def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False) -> None:
     tracker = Tracker()  # 追踪器初始化
 
+    # 以秒为单位测量运行时间
+    start_time = time.time()
+
     if is_image_file(str(file_path)):
         img = cv2.imread(str(file_path))
+        img = cv2.resize(img, (640, 360))
         print(f"[INFO] Processing image: {file_path}")
         if img is None:
             print(f"[ERROR] cv2.imread {file_path} failed")
             return
 
         bboxes, kpss, scores = detector.detect(img)
+
+        # 以秒为单位测量运行时间
+        detection_time = time.time() - start_time
+        print(f"检测耗时: {detection_time:.3f}s")
+
         tracker.update(bboxes, kpss, scores)  # 更新追踪器
 
         # cv2.imshow("ID Map", id_map)
@@ -34,15 +45,17 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
         # cv2.waitKey(0)
 
         # 获取每个框的信息
-        boxes = [student.bbox for student in tracker.student_trackers]
-        kpss = [student.kps for student in tracker.student_trackers]
-        ids = [student.id for student in tracker.student_trackers]
+        boxes, kpss, ids = zip(*[(student.bbox, student.kps, student.id) for student in tracker.student_trackers])
 
         detector.draw(img, np.array(boxes), np.array(kpss), np.array(ids))  # 绘制人脸框
 
         output_path = result_dir / (file_path.stem + ".png")
         cv2.imwrite(str(output_path), img)
 
+        # 计算跟踪耗时
+        tracking_time = time.time() - detection_time - start_time
+        print(f"跟踪耗时: {tracking_time:.3f}s")
+        print(f"总耗时: {time.time() - start_time:.3f}s")
         print(f"[INFO] Image saved to: {output_path}")
 
     elif is_video_file(str(file_path)):
@@ -50,11 +63,13 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        duration = total_frames / cap.get(cv2.CAP_PROP_FPS)
+        print(f"视频时长: {duration:.2f}s")
 
         interval = 1
         standard = 60  # 设定的标准帧数量
         processed_frames = 0
-        update_interval = 10  # 更新进度条
+        update_interval = 5  # 更新进度条
 
         if save:
             output_path = result_dir / (file_path.stem + ".mp4")
@@ -73,21 +88,27 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
             bboxes, kpss, scores = detector.detect(srcimg)  # 检测人脸
             tracker.update(bboxes, kpss, scores)  # 更新追踪器
 
-            boxes = [student.bbox for student in tracker.student_trackers]
-            kpss = [student.kps for student in tracker.student_trackers]
-            ids = [student.id for student in tracker.student_trackers]
+            boxes, kpss, ids = zip(*[(student.bbox, student.kps, student.id) for student in tracker.student_trackers])
 
             outimg = detector.draw(srcimg, np.array(boxes), np.array(kpss), np.array(ids))  # 绘制人脸框
 
-            cv2.imshow('Deep learning object detection in OpenCV', outimg)  # 显示检测结果
+            # cv2.imshow('Deep learning object detection in OpenCV', outimg)  # 显示检测结果
 
             if save:
                 video.write(outimg)
+
+                # 更新进度条
+                processed_frames += 1
+                if processed_frames % update_interval == 0:
+                    progress = processed_frames / total_frames
+                    print_progress_bar(progress)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):  # 按 'q' 键退出
                 break
 
         cap.release()  # 释放视频捕获对象
+        total_time = time.time() - start_time
+        print(f"总耗时: {total_time:.2f}s")
         if save:
             video.release()  # 释放视频写入对象
             print(f"[INFO] Video saved to: {output_path}")
@@ -193,11 +214,10 @@ def main(input_path, onnxmodel_path, result_dir=Path("result"), prob_threshold=0
                 process_file(Path(entry), detector, Path(result_dir), save=save)
 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, default="data/classroom_20s.mp4", help="input image or video path")
-    parser.add_argument("--onnxmodel", type=str, default="weights/scrfd_10g_kps.onnx", help="onnx model path")
+    parser.add_argument("--onnxmodel", type=str, default="weights/scrfd_2.5g_kps.onnx", help="onnx model path")
     parser.add_argument("--prob_threshold", type=float, default=0.5, help="face detection probability threshold")
     parser.add_argument("--nms_threshold", type=float, default=0.4, help="non-maximum suppression threshold")
     parser.add_argument("--result_dir", type=str, default="result", help="result directory")
@@ -208,5 +228,3 @@ if __name__ == "__main__":
     print(args)
 
     main(args.input, args.onnxmodel, args.result_dir, args.confThreshold, args.nmsThreshold, save=args.save)
-
-

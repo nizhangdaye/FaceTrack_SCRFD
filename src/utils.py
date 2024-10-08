@@ -26,8 +26,10 @@ def print_progress_bar(progress):
     bar_width = 70
     pos = int(bar_width * progress)
     bar = "[" + "=" * pos + ">" + " " * (bar_width - pos - 1) + "]"
-    print(f"{bar} {int(progress * 100)} %", end='\r')
-    if progress == 1:
+    # 输出进度条和百分比，使用格式化字符串提供更多精度
+    print(f"{bar} {progress * 100:.2f} %", end='\r', flush=True)
+
+    if progress >= 1:
         print()  # 完成时换行
 
 
@@ -63,3 +65,10 @@ def cluster_faces(face_boxes, num_clusters):
         print("K-means 输入数据无效.")
 
     return clustered_rects
+
+
+if __name__ == '__main__':
+    import time
+    for i in range(101):
+        print_progress_bar(i / 100)
+        time.sleep(0.1)  # 模拟任务延时
