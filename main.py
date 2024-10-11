@@ -7,7 +7,6 @@ import time
 
 from src.scrfd import SCRFD
 from src.utils import is_image_file, is_video_file, print_progress_bar
-from src.cluster import cluster_faces_for_id
 from src.classroom import Classroom
 
 clustering_done = False
