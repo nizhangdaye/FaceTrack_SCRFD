@@ -37,14 +37,18 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
 
         # 排序人脸框
 
+        start_time = time.time()
         classroom.update(bboxes, kpss, scores)  # 更新教室信息
+        print(f"更新教室信息用时：{time.time() - start_time:.5f}s")
 
+        # -----------------------------------------------绘制人脸框---------------------------------------#
         # 获取每个框的信息
-        boxes = [student.bbox for student in classroom.students]
-        kpss = [student.kps for student in classroom.students]
-        ids = [student.ID.id for student in classroom.students]
+        start_time = time.time()
+        boxes, kpss, ids = zip(*[(student.bbox, student.kps, student.ID.id) for student in classroom.students])
 
         detector.draw(img, np.array(boxes), np.array(kpss), np.array(ids))  # 绘制人脸框
+        print(f"绘制用时：{time.time() - start_time:.4f}s")
+        # ----------------------------------------------------------------------------------------------#
 
         output_path = result_dir / (file_path.stem + ".png")
         cv2.imwrite(str(output_path), img)
@@ -76,19 +80,24 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
             # 缩放到 640x360
             srcimg = cv2.resize(srcimg, (640, 360))
 
-            bboxes, kpss, scores = detector.detect(srcimg)  # 检测人脸
-            classroom.update(bboxes, kpss, scores)  # 更新追踪器
-
-            boxes = [student.bbox for student in classroom.students]
-            kpss = [student.kps for student in classroom.students]
-            ids = [student.ID.id for student in classroom.students]
-
-            outimg = detector.draw(srcimg, np.array(boxes), np.array(kpss), np.array(ids))  # 绘制人脸框
-
-            cv2.imshow('Deep learning object detection in OpenCV', outimg)  # 显示检测结果
-
+            # -----------------------------------------------检测人脸------------------------------------#
+            start_time = time.time()
+            bboxes, kpss, scores = detector.detect(srcimg)
+            print("-----------------------------------------------")
+            print(f"检测用时：{(time.time() - start_time)*1000:.3f}ms")
+            # --------------------------------------------更新教室信息------------------------------------#
+            start_time = time.time()
+            classroom.update(bboxes, kpss, scores)
+            print(f"更新教室用时：{(time.time() - start_time)*1000:.3f}ms")
+            # -----------------------------------------------绘制人脸框------------------------------------#
+            start_time = time.time()
+            boxes, kpss, ids = zip(*[(student.bbox, student.kps, student.ID.id) for student in classroom.students])
+            detector.draw(srcimg, np.array(boxes), np.array(kpss), np.array(ids))  # 绘制人脸框
+            cv2.imshow('Deep learning object detection in OpenCV', srcimg)  # 显示检测结果
+            print(f"绘制并显示用时：{(time.time() - start_time)*1000:.3f}ms")
+            # -----------------------------------------------保存视频--------------------------------------#
             if save:
-                video.write(outimg)
+                video.write(srcimg)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):  # 按 'q' 键退出
                 break

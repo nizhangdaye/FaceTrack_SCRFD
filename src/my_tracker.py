@@ -148,7 +148,7 @@ class Tracker:
         current_detections = [{'bbox': bboxes[i], 'kps': kpss[i], 'score': scores[i]} for i in range(len(bboxes))]
 
         # 匹配当前帧的检测与现有的跟踪器
-        matches = match_detections_to_trackers(self.student_trackers, current_detections)
+        matches = match_detections_to_trackers(self.student_trackers, current_detections, threshold=50)
 
         matched_detections = set([m[1] for m in matches])
         # 处理匹配的检测框
