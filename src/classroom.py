@@ -25,6 +25,16 @@ class ID:
         self.last_active_frame = None
         # self.bbox = None
 
+    def update(self, bbox, frame_num):
+        """
+        更新 ID 信息
+        :param bbox: ID 的位置
+        :param frame_num: 当前帧数
+        """
+        self.bbox = bbox
+        self.last_active_frame = frame_num
+        self.active = True
+
 
 class Student:
     def __init__(self, bbox, frame_num, new_id: ID):
@@ -34,6 +44,7 @@ class Student:
         self.ID = new_id
         self.ID.bbox = bbox
         self.ID.last_active_frame = frame_num
+        self.is_occluded = False  # 是否被遮挡
 
     def update(self, bbox, frame_num):
         self.bbox = bbox
@@ -44,7 +55,7 @@ class Student:
 
 class Classroom:
     def __init__(self, max_inactive_frames=15):
-        self.id_map = np.zeros((640, 360), dtype=np.uint8)
+        self.id_map = np.zeros((640, 360), dtype=np.uint16)
         self.id_width_height_map = np.zeros((640, 360), dtype=np.float32)
         self.students = []
         self.current_frame = 0  # 当前帧数
@@ -52,49 +63,91 @@ class Classroom:
         self.max_inactive_frames = max_inactive_frames  # 如果在 max_inactive_frames 内没有更新，则认为学生离开了
 
     def update(self, bboxes: np.ndarray) -> None:
-        current_detections = bboxes
+        """
+        更新学生信息
+        :param bboxes: 学生的边界框列表
+        """
+        self.current_frame += 1
 
-        #
-        # 匹配当前帧的检测与记录的学生
-        start_time = time.time()
-        matches = match_detections_to_students(self.students, bboxes, threshold=50)
-        print(f"匹配用时: {(time.time() - start_time) * 1000:.3f}ms")
+        iou_threshold = 0.5  # 两个边界框的 IoU 阈值
 
-        # 处理匹配的检测框
-        start_time = time.time()
-        for match in matches:
-            student_index, detection_index = match
-            student = self.students[student_index]
-            detection = bboxes[detection_index]
-            student.update(detection, self.current_frame)
-            self.update_id_map_and_width_height_map(*detection, student.ID.id)
-        print(f"处理匹配框用时: {(time.time() - start_time) * 1000:.3f}ms")
-
-        # 处理未匹配的检测框  未匹配的检测框可视为新识别的学生
-        start_time = time.time()
-        matched_detections = set([m[1] for m in matches])  # 已经匹配的检测框
-        unmatched_detections = set(range(len(bboxes))) - matched_detections  # 未匹配的检测框
-        for detection_index in unmatched_detections:
-            detection = bboxes[detection_index]
-            new_ID = self.get_new_id()
-            student = Student(detection, self.current_frame, new_ID)
-            self.students.append(student)
-            self.update_id_map_and_width_height_map(*detection, student.ID.id)
-        print(f"处理未匹配框用时: {(time.time() - start_time) * 1000:.3f}ms")
-
-        # 移除超过最大未活动帧数的学生，并释放其 ID
-        start_time = time.time()
-        active_trackers = []
-        for student in self.students:
-            if self.current_frame - student.frame_num < self.max_inactive_frames:
-                active_trackers.append(student)
+        # 常规情况：逐个检测框与 ID Map 进行匹配
+        unassigned_bboxes = []
+        for i, student in enumerate(self.students):
+            # 检测 student 周围的检测框
+            xmin, ymin, xamx, ymax = student.bbox
+            x1, y1, x2, y2 = max(0, xmin - 20), max(0, ymin - 20), min(640, xamx + 20), min(360, ymax + 20)
+            # 找出与感兴趣区域有交集的检测框
+            interested_bboxes = bboxes[
+                np.where((bboxes[:, 0] >= x1) | (bboxes[:, 1] >= y1) | (bboxes[:, 2] <= x2) | (bboxes[:, 3] <= y2))]
+            # 将有交集的检测框与感兴趣区域进行 IoU 计算，找出 IoU 最大的检测框
+            max_iou = 0
+            max_iou_bbox = None
+            for bbox in interested_bboxes:
+                iou = bbox_iou(bbox, student.bbox)
+                if iou > max_iou:
+                    max_iou = iou
+                    max_iou_bbox = bbox
+            if max_iou > iou_threshold:
+                # 找到了 IoU 最大的检测框，将该检测框与学生绑定
+                student.update(max_iou_bbox, self.current_frame)
+                self.update_id_map_and_width_height_map(max_iou_bbox[0], max_iou_bbox[1], max_iou_bbox[2],
+                                                        max_iou_bbox[3],
+                                                        student.ID.id)
             else:
-                student.ID.release()
-        print(f"移除超过最大未活动帧数的学生用时: {(time.time() - start_time) * 1000:.3f}ms")
+                # 没有找到 IoU 最大的检测框，将该学生标记为遮挡
+                student.is_occluded = True
+                unassigned_bboxes.append(student.bbox)
 
-        self.students = active_trackers  # 更新学生列表
+        # # 处理遮挡学生
+        # for student in self.students:
+        #     if student.is_occluded:
+        #         # 学生被遮挡，将其 ID 释放
+        #         student.ID.release()
+        #         student.is_occluded = False
 
-        self.current_frame += 1  # 更新帧数
+        # # 处理失活学生
+        # for i, student in enumerate(self.students):
+        #     if self.current_frame - student.frame_num > self.max_inactive_frames:
+        #         # 学生失活，将其 ID 释放
+        #         student.ID.release()
+        #         self.students.pop(i)
+
+        # 新目标检测框ID赋值(即没有匹配到ID的目标框)
+        if not self.students:
+            unassigned_bboxes = bboxes
+        print(f"未分配的目标框数：{len(unassigned_bboxes)}")
+        for i, bbox in enumerate(unassigned_bboxes):
+            # 如果 bbox 在 ID Map 范围内与 ID 有交集，若该 ID 失能，则将该 ID 与该 bbox 绑定
+            xmin, ymin, xamx, ymax = bbox[0], bbox[1], bbox[2], bbox[3]
+            interested_area = self.id_map[max(0, ymin - 20):min(360, ymax + 20), max(0, xmin - 20):min(640, xamx + 10)]
+            interested_ids = np.unique(interested_area)  # 去重
+            # ！！！！！！！！！！！！！！！！！！！！！可能会有多个失活 ID 的情况，所以需要遍历所有失活 ID，找出 IoU 最大的 ID 进行绑定
+            max_iou = 0
+            max_iou_id = -1
+            for id_ in interested_ids:
+                if id_ == 0:
+                    continue  # 0 代表没有 ID
+                if not self.used_ids[id_ - 1].active:
+                    # 该 ID 失活，找出 IoU 最大的 ID 进行绑定
+                    iou = bbox_iou(bbox, self.used_ids[id_ - 1].bbox)
+                    if iou > max_iou:
+                        max_iou = iou
+                        max_iou_id = id_
+            if max_iou_id != -1:
+                # 找到了 IoU 最大的 ID，将该 ID 与该 bbox 绑定
+                self.used_ids[max_iou_id - 1].active = True
+                self.used_ids[max_iou_id - 1].bbox = bbox
+                self.used_ids[max_iou_id - 1].last_active_frame = self.current_frame
+                self.students.append(Student(bbox, self.current_frame, self.used_ids[max_iou_id - 1]))
+            else:
+                # 没有找到空闲的 ID，则创建一个新的 ID
+                new_id = self.get_new_id()
+                if new_id == -1:
+                    print("No free ID available")
+                    continue  # 没有空闲的 ID，跳过
+                new_id.update(bbox, self.current_frame)
+                self.students.append(Student(bbox, self.current_frame, new_id))
 
     def get_new_id(self):
         """
@@ -107,56 +160,10 @@ class Classroom:
         return -1
 
     def update_id_map_and_width_height_map(self, x, y, w, h, id_):
+        # 没有考虑遮挡与被遮挡的情况
         x, y, w, h = int(x), int(y), int(w), int(h)
         self.id_width_height_map[y:y + h, x:x + w] = w * h
         self.id_map[y:y + h, x:x + w] = id_
-
-
-def match_detections_to_students(tracks: list, detections: np.ndarray, threshold=10) -> list[tuple[Any, Any]]:
-    """
-    使用 Hungarian 算法匹配检测框与跟踪器
-    """
-    start_time = time.time()
-    cost_matrix = compute_cost_matrix(tracks, detections)  # 计算匹配成本矩阵
-    print(f"计算匹配成本矩阵用时: {(time.time() - start_time) * 1000:.3f}ms")
-    start_time = time.time()
-    row_ind, col_ind = linear_sum_assignment(cost_matrix, maximize=False)  # 使用 Hungarian 算法匹配
-    print(f"使用 Hungarian 算法匹配用时: {(time.time() - start_time) * 1000:.3f}ms")
-    matches = []
-
-    for r, c in zip(row_ind, col_ind):
-        if cost_matrix[r, c] < threshold:
-            matches.append((r, c))
-
-    return matches
-
-
-def compute_cost_matrix(tracks: list, detections: np.ndarray, distance_weight=1, iou_weight=10) -> np.ndarray:
-    """
-    使用欧氏距离计算匹配成本矩阵
-    :param tracks: 跟踪器的列表
-    :param detections: 检测框的列表
-    :return: 成本矩阵
-    """
-    cost_matrix = np.zeros((len(tracks), len(detections)))
-
-    for i, track in enumerate(tracks):
-        for j, detection in enumerate(detections):
-            # 计算欧式距离
-            distance = np.sqrt(
-                (track.bbox[0] - detection[0]) ** 2 + (track.bbox[1] - detection[1]) ** 2
-            )
-
-            # 计算 IoU
-            iou = bbox_iou(track.bbox, detection)
-
-            # 将 IoU 转换为距离度量
-            iou_cost = 1 - iou
-
-            # 结合欧式距离和 IoU，按加权平均的方式
-            cost_matrix[i, j] = distance_weight * distance + iou_weight * iou_cost
-
-    return cost_matrix
 
 
 def bbox_iou(bbox1, bbox2):
