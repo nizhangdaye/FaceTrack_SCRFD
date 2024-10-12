@@ -27,20 +27,16 @@ class ID:
 
 
 class Student:
-    def __init__(self, bbox, kps, score, frame_num, new_id: ID):
+    def __init__(self, bbox, frame_num, new_id: ID):
         self.bbox = bbox
-        self.kps = kps
-        self.score = score
         self.frame_num = frame_num  # 第几帧检测到
 
         self.ID = new_id
         self.ID.bbox = bbox
         self.ID.last_active_frame = frame_num
 
-    def update(self, bbox, kps, score, frame_num):
+    def update(self, bbox, frame_num):
         self.bbox = bbox
-        self.kps = kps
-        self.score = score
         self.frame_num = frame_num
         self.ID.last_active_frame = frame_num
         self.ID.bbox = bbox
@@ -55,14 +51,13 @@ class Classroom:
         self.used_ids = [ID(i) for i in range(60)]  # 最多 60 个学生
         self.max_inactive_frames = max_inactive_frames  # 如果在 max_inactive_frames 内没有更新，则认为学生离开了
 
-    def update(self, bboxes: np.ndarray, kpss: np.ndarray, scores: np.ndarray) -> None:
-        # 创建当前帧的检测字典列表
-        current_detections = [{'bbox': bboxes[i], 'kps': kpss[i], 'score': scores[i]} for i in range(len(bboxes))]
+    def update(self, bboxes: np.ndarray) -> None:
+        current_detections = bboxes
 
         #
         # 匹配当前帧的检测与记录的学生
         start_time = time.time()
-        matches = match_detections_to_students(self.students, current_detections, threshold=50)
+        matches = match_detections_to_students(self.students, bboxes, threshold=50)
         print(f"匹配用时: {(time.time() - start_time) * 1000:.3f}ms")
 
         # 处理匹配的检测框
@@ -70,22 +65,21 @@ class Classroom:
         for match in matches:
             student_index, detection_index = match
             student = self.students[student_index]
-            detection = current_detections[detection_index]
-            student.update(detection['bbox'], detection['kps'], detection['score'], self.current_frame)
-            self.update_id_map_and_width_height_map(*detection['bbox'], student.ID.id)
+            detection = bboxes[detection_index]
+            student.update(detection, self.current_frame)
+            self.update_id_map_and_width_height_map(*detection, student.ID.id)
         print(f"处理匹配框用时: {(time.time() - start_time) * 1000:.3f}ms")
 
         # 处理未匹配的检测框  未匹配的检测框可视为新识别的学生
         start_time = time.time()
         matched_detections = set([m[1] for m in matches])  # 已经匹配的检测框
-        unmatched_detections = set(range(len(current_detections))) - matched_detections  # 未匹配的检测框
+        unmatched_detections = set(range(len(bboxes))) - matched_detections  # 未匹配的检测框
         for detection_index in unmatched_detections:
-            detection = current_detections[detection_index]
+            detection = bboxes[detection_index]
             new_ID = self.get_new_id()
-            student = Student(detection['bbox'], detection['kps'], detection['score'],
-                              self.current_frame, new_ID)
+            student = Student(detection, self.current_frame, new_ID)
             self.students.append(student)
-            self.update_id_map_and_width_height_map(*detection['bbox'], student.ID.id)
+            self.update_id_map_and_width_height_map(*detection, student.ID.id)
         print(f"处理未匹配框用时: {(time.time() - start_time) * 1000:.3f}ms")
 
         # 移除超过最大未活动帧数的学生，并释放其 ID
@@ -118,7 +112,7 @@ class Classroom:
         self.id_map[y:y + h, x:x + w] = id_
 
 
-def match_detections_to_students(tracks: list, detections: list[dict], threshold=10) -> list[tuple[Any, Any]]:
+def match_detections_to_students(tracks: list, detections: np.ndarray, threshold=10) -> list[tuple[Any, Any]]:
     """
     使用 Hungarian 算法匹配检测框与跟踪器
     """
@@ -137,7 +131,7 @@ def match_detections_to_students(tracks: list, detections: list[dict], threshold
     return matches
 
 
-def compute_cost_matrix(tracks: list, detections: list[dict], distance_weight=1, iou_weight=10) -> np.ndarray:
+def compute_cost_matrix(tracks: list, detections: np.ndarray, distance_weight=1, iou_weight=10) -> np.ndarray:
     """
     使用欧氏距离计算匹配成本矩阵
     :param tracks: 跟踪器的列表
@@ -150,11 +144,11 @@ def compute_cost_matrix(tracks: list, detections: list[dict], distance_weight=1,
         for j, detection in enumerate(detections):
             # 计算欧式距离
             distance = np.sqrt(
-                (track.bbox[0] - detection['bbox'][0]) ** 2 + (track.bbox[1] - detection['bbox'][1]) ** 2
+                (track.bbox[0] - detection[0]) ** 2 + (track.bbox[1] - detection[1]) ** 2
             )
 
             # 计算 IoU
-            iou = bbox_iou(track.bbox, detection['bbox'])
+            iou = bbox_iou(track.bbox, detection)
 
             # 将 IoU 转换为距离度量
             iou_cost = 1 - iou

@@ -141,13 +141,13 @@ class SCRFD():
 
         return bboxes[indices], kpss[indices], scores[indices]
 
-    def draw(self, srcimg: np.ndarray, bboxes: np.ndarray, kpss: np.ndarray, scores: np.ndarray):
+    def draw(self, srcimg: np.ndarray, bboxes: np.ndarray, id: np.ndarray, kpss: np.ndarray = None, ):
         """
         根据检测结果在原始图片上绘制人脸检测的框和关键点
         :param srcimg: 原始图片
         :param bboxes: 检测到的边界框
         :param kpss: 检测到的关键点
-        :param scores: 检测的分数
+        :param id: 人脸ID
         :return: 返回绘制了检测结果的图片
         """
         for i in range(bboxes.shape[0]):
@@ -155,13 +155,52 @@ class SCRFD():
                 bboxes[i, 1] + bboxes[i, 3])
             # 绘制边界框
             cv2.rectangle(srcimg, (xmin, ymin), (xamx, ymax), (0, 0, 255), thickness=1)
-            # # 绘制关键点
-            # for j in range(5):
-            #     cv2.circle(srcimg, (int(kpss[i, j, 0]), int(kpss[i, j, 1])), 1, (0, 255, 0), thickness=-1)
-            # 绘制分数
-            cv2.putText(srcimg, str(round(scores[i], 3)), (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0),
+            if kpss is not None:
+                # 绘制关键点
+                for j in range(5):
+                    cv2.circle(srcimg, (int(kpss[i, j, 0]), int(kpss[i, j, 1])), 1, (0, 255, 0), thickness=-1)
+            # 绘制 ID
+            cv2.putText(srcimg, str(round(id[i], 3)), (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0),
                         thickness=1)
         return srcimg
+
+
+def sort_faces_by_row(bboxes):
+    # bboxes: 每个人脸的框，形状为(N, 4), 每个元素为 [x_min, y_min, x_max, y_max]
+
+    # 获取每个bbox的y_min值
+    y_min_vals = bboxes[:, 1]
+
+    # 设置一个y坐标的阈值，用于区分每一排
+    y_threshold = 35  # 可根据具体图片调整阈值
+
+    # 按y_min排序
+    sorted_indices = np.argsort(-y_min_vals)
+    sorted_bboxes = bboxes[sorted_indices]
+
+    rows = []
+    current_row = []
+    current_y = sorted_bboxes[0, 1]
+
+    for bbox in sorted_bboxes:
+        if abs(bbox[1] - current_y) > y_threshold:
+            # 如果超过阈值，认为是新的一排
+            rows.append(current_row)
+            current_row = []
+            current_y = bbox[1]
+        current_row.append(bbox)
+
+    # 别忘了最后一排也要加入
+    if current_row:
+        rows.append(current_row)
+
+    # 按每一排的x_min进行排序
+    face_order = []
+    for row in rows:
+        row = sorted(row, key=lambda x: x[0])  # 按x_min从左到右排序
+        face_order.extend(row)
+
+    return np.array(face_order)
 
 
 if __name__ == '__main__':
