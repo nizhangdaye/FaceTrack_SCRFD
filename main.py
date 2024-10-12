@@ -69,102 +69,13 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
             video.release()  # 释放视频写入对象
             print(f"[INFO] Video saved to: {output_path}")
 
-        # output_path = result_dir / (Path(file_path).stem + ".mp4")
-        # video = cv2.VideoWriter(str(output_path), cv2.VideoWriter_fourcc(*'MP4V'),
-        #                         cap.get(cv2.CAP_PROP_FPS), (frame_width, frame_height))
-        #
-        # num_clusters = 0
-        # # prob_threshold = 0.3  # 人脸置信度阈值
-        # # nms_threshold = 0.3  # 非极大值抑制阈值
-        #
-        # tracker = MultiObjectTracker()  # 追踪器初始化
-        # id_to_boxes = {}  # 存储每个ID对应的检测框
-        # id_to_standard_box = {}  # 存储每个ID对应的标准框
-        #
-        # while cap.isOpened():
-        #     ret, frame = cap.read()
-        #     if not ret:
-        #         break
-        #
-        #     det_frame_data = []  # 存储当前帧的检测框信息
-        #
-        #     # 如果当前帧数小于标准帧数，则进行检测，否则进行追踪，即每隔 standard 帧进行一次追踪
-        #     if processed_frames <= standard:  # 如果在标准帧范围之内，进行检测并存下检测信息用作后续聚类
-        #         boxes, kpss, scores = detector.detect(frame)  # 检测人脸
-        #         detector.draw(frame, boxes, kpss, scores)  # 在当前帧绘制检测框
-        #
-        #         detected_boxes = boxes
-        #
-        #         for i, box in enumerate(detected_boxes):
-        #             cur_box = {
-        #                 'box': box,
-        #                 'id': i,
-        #                 'frame': processed_frames
-        #             }
-        #             det_frame_data.append(cur_box)  # 存下当前帧的检测框信息
-        #
-        #         tracking_results = tracker.update(det_frame_data)  # 进行追踪
-        #
-        #         for it in tracking_results:
-        #             cv2.rectangle(frame, it.box, (255, 0, 255), 2)
-        #             label = f"ID: {it.id}"
-        #             cv2.putText(frame, label, (it.box[0], it.box[1]),
-        #                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255))
-        #             id_to_boxes.setdefault(it.id, []).append(it.box)
-        #
-        #         initial_face_boxes.append([boxes, kpss, scores])
-        #
-        #         if processed_frames == standard:
-        #             for id, boxes in id_to_boxes.items():
-        #                 num_clusters = 1  # 根据ID的检测框进行聚类
-        #                 standard_box = cluster_faces_for_id(boxes, num_clusters)
-        #                 id_to_standard_box[id] = standard_box
-        #             global clustering_done
-        #             clustering_done = True
-        #     else:
-        #         if (processed_frames - standard) % interval == 0:
-        #             detector.detect(frame)
-        #             detector.draw(frame)
-        #
-        #         if clustering_done:
-        #             for id, standard_box in id_to_standard_box.items():
-        #                 cv2.rectangle(frame, standard_box, (0, 255, 0), 2)
-        #                 label = f"Standard ID: {id}"
-        #                 cv2.putText(frame, label, (standard_box.x, standard_box.y),
-        #                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        #
-        #     video.write(frame)
-        #
-        #     # 更新进度条
-        #     processed_frames += 1
-        #     if processed_frames % update_interval == 0:
-        #         progress = processed_frames / total_frames
-        #         print_progress_bar(progress)
-        #
-        # cap.release()
-        # video.release()
-        #
-        # print(f"[INFO] Video saved to: {output_path}")
-
 
 def main(input_path, onnxmodel_path, result_dir=Path("result"), prob_threshold=0.5, nms_threshold=0.4):
-    # if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
-    #     print(f"[ERROR] File does not exist: {dir_path}")
-    #     return
-
     if not os.path.exists(onnxmodel_path):
         print("[ERROR] Model File or Param File does not exist")
         return
 
-    # result_dir = Path(dir_path) / "result"
-    # if not result_dir.exists():
-    #     result_dir.mkdir()
-
     detector = SCRFD(onnxmodel_path, prob_threshold, nms_threshold)
-
-    # for entry in Path(dir_path).iterdir():  # 遍历目录
-    #     if entry.is_file():
-    #         process_file(entry, detector, result_dir)
 
     process_file(Path(input_path), detector, Path(result_dir))
 
