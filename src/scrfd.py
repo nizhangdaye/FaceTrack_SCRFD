@@ -139,7 +139,10 @@ class SCRFD():
         # 非极大值抑制
         indices = cv2.dnn.NMSBoxes(bboxes.tolist(), scores.tolist(), self.confThreshold, self.nmsThreshold)
 
-        return bboxes[indices], kpss[indices], scores[indices]
+        # 将boxes中的元素转为 int 类型
+        bboxes = bboxes[indices].astype(int)
+
+        return bboxes, kpss[indices], scores[indices]
 
     def draw(self, srcimg: np.ndarray, bboxes: np.ndarray, id: np.ndarray, kpss: np.ndarray = None, ):
         """
