@@ -32,22 +32,21 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
 
         bboxes, kpss, scores = detector.detect(img)
 
-        print(f"检测用时：{time.time() - start_time:.3f}s")
+        print(f"检测用时：{(time.time() - start_time) * 1000:.3f}ms")
         # ----------------------------------------------对人脸进行排序--------------------------------#
         start_time = time.time()
         bboxes = scrfd.sort_faces_by_row(bboxes)
         print(f"排序用时：{(time.time() - start_time) * 1000:.3f}ms")
         # --------------------------------------------更新教室信息------------------------------------#
         start_time = time.time()
-        classroom.update(bboxes, kpss, scores)  # 更新教室信息
-        print(f"更新教室信息用时：{time.time() - start_time:.5f}s")
+        classroom.update(bboxes)  # 更新教室信息
+        print(f"更新教室信息用时：{(time.time() - start_time) * 1000:.3f}ms")
         # -----------------------------------------------绘制人脸框---------------------------------------#
         # 获取每个框的信息
         start_time = time.time()
-        boxes, kpss, ids = zip(*[(student.bbox, student.kps, student.ID.id) for student in classroom.students])
-
-        detector.draw(img, np.array(boxes), np.array(kpss), np.array(ids))  # 绘制人脸框
-        print(f"绘制用时：{time.time() - start_time:.4f}s")
+        boxes, ids = zip(*[(student.bbox, student.ID.id) for student in classroom.students])
+        detector.draw(img, np.array(boxes), np.array(ids))  # 绘制人脸框
+        print(f"绘制用时：{(time.time() - start_time) * 1000:.3f}ms")
         # ----------------------------------------------------------------------------------------------#
 
         output_path = result_dir / (file_path.stem + ".png")
@@ -128,7 +127,7 @@ def main(input_path, onnxmodel_path, result_dir=Path("result"), prob_threshold=0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=str, default="data/classroom_20s.mp4", help="input image or video path")
+    parser.add_argument("--input", type=str, default="data/R-C.jpg", help="input image or video path")
     parser.add_argument("--onnxmodel", type=str, default="weights/scrfd_10g_kps.onnx", help="onnx model path")
     parser.add_argument("--prob_threshold", type=float, default=0.5, help="face detection probability threshold")
     parser.add_argument("--nms_threshold", type=float, default=0.4, help="non-maximum suppression threshold")
