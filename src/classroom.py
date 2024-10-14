@@ -61,6 +61,7 @@ class Classroom:
         self.current_frame = 0  # 当前帧数
         self.used_ids = [ID(i) for i in range(60)]  # 最多 60 个学生
         self.max_inactive_frames = max_inactive_frames  # 如果在 max_inactive_frames 内没有更新，则认为学生离开了
+        self.interested_area = 20
 
     def update(self, bboxes: np.ndarray) -> None:
         """
@@ -76,7 +77,8 @@ class Classroom:
         for i, student in enumerate(self.students):
             # 检测 student 周围的检测框
             xmin, ymin, xamx, ymax = student.bbox
-            x1, y1, x2, y2 = max(0, xmin - 20), max(0, ymin - 20), min(640, xamx + 20), min(360, ymax + 20)
+            x1, y1, x2, y2 = (max(0, xmin - self.interested_area), max(0, ymin - self.interested_area),
+                              min(640, xamx + self.interested_area), min(360, ymax + self.interested_area))
             # 找出与感兴趣区域有交集的检测框
             interested_bboxes = bboxes[
                 np.where((bboxes[:, 0] >= x1) | (bboxes[:, 1] >= y1) | (bboxes[:, 2] <= x2) | (bboxes[:, 3] <= y2))]
@@ -92,8 +94,7 @@ class Classroom:
                 # 找到了 IoU 最大的检测框，将该检测框与学生绑定
                 student.update(max_iou_bbox, self.current_frame)
                 self.update_id_map_and_width_height_map(max_iou_bbox[0], max_iou_bbox[1], max_iou_bbox[2],
-                                                        max_iou_bbox[3],
-                                                        student.ID.id)
+                                                        max_iou_bbox[3], student.ID.id)
             else:
                 # 没有找到 IoU 最大的检测框，将该学生标记为遮挡
                 student.is_occluded = True
@@ -120,7 +121,8 @@ class Classroom:
         for i, bbox in enumerate(unassigned_bboxes):
             # 如果 bbox 在 ID Map 范围内与 ID 有交集，若该 ID 失能，则将该 ID 与该 bbox 绑定
             xmin, ymin, xamx, ymax = bbox[0], bbox[1], bbox[2], bbox[3]
-            interested_area = self.id_map[max(0, ymin - 20):min(360, ymax + 20), max(0, xmin - 20):min(640, xamx + 10)]
+            interested_area = self.id_map[max(0, ymin - self.interested_area):min(360, ymax + self.interested_area),
+                              max(0, xmin - self.interested_area):min(640, xamx + self.interested_area)]
             interested_ids = np.unique(interested_area)  # 去重
             # ！！！！！！！！！！！！！！！！！！！！！可能会有多个失活 ID 的情况，所以需要遍历所有失活 ID，找出 IoU 最大的 ID 进行绑定
             max_iou = 0
