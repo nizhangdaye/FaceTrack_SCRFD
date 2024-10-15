@@ -23,8 +23,9 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
     if is_image_file(str(file_path)):
         # -------------------------------------检测人脸-------------------------------------------------#
         start_time = time.time()
-
         img = cv2.imread(str(file_path))
+        # 缩放到 640x360
+        img = cv2.resize(img, (640, 360))
         print(f"[INFO] Processing image: {file_path}")
         if img is None:
             print(f"[ERROR] cv2.imread {file_path} failed")
@@ -44,7 +45,7 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
         # -----------------------------------------------绘制人脸框---------------------------------------#
         # 获取每个框的信息
         start_time = time.time()
-        boxes, ids = zip(*[(student.bbox, student.ID.id) for student in classroom.students])
+        boxes, ids = zip(*[(student.bbox, student.id) for student in classroom.students])
         detector.draw(img, np.array(boxes), np.array(ids))  # 绘制人脸框
         print(f"绘制用时：{(time.time() - start_time) * 1000:.3f}ms")
         # ----------------------------------------------------------------------------------------------#
@@ -94,7 +95,7 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
             print(f"更新教室用时：{(time.time() - start_time) * 1000:.3f}ms")
             # -----------------------------------------------绘制人脸框------------------------------------#
             start_time = time.time()
-            boxes, ids = zip(*[(student.bbox, student.ID.id) for student in classroom.students])
+            boxes, ids = zip(*[(student.bbox, student.id) for student in classroom.students])
             detector.draw(srcimg, np.array(boxes), np.array(ids))  # 绘制人脸框
             cv2.imshow('Deep learning object detection in OpenCV', srcimg)  # 显示检测结果
             print(f"绘制并显示用时：{(time.time() - start_time) * 1000:.3f}ms")
