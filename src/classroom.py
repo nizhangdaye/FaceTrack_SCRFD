@@ -55,6 +55,7 @@ class Classroom:
 
         # 常规情况：逐个检测框与 ID Map 进行匹配
         unassigned_students = []
+        assigned_detect_bboxes = []
         for i, student in enumerate(self.students):
             # 检测 student 周围的检测框
             xmin, ymin, xmax, ymax = (student.bbox[0], student.bbox[1],
@@ -76,6 +77,7 @@ class Classroom:
                 # 找到了 IoU 最大的检测框，将该检测框与学生绑定
                 student.update(max_iou_bbox, self.current_frame)
                 self.update_id_map_and_width_height_map(*max_iou_bbox, student.id)
+                assigned_detect_bboxes.append(max_iou_bbox)
             else:
                 # 没有找到 IoU 最大的检测框，将该学生标记为遮挡
                 print(f"Student {student.id} is occluded")
@@ -94,32 +96,31 @@ class Classroom:
                 new_id.update(bbox, self.current_frame)
                 self.students.append(new_id)
         else:
-            print(f"未分配的目标框数：{len(unassigned_students)}")
+            print(f"未分配的 ID 数：{len(unassigned_students)}")
+            assigned_detect_bboxes = np.array(assigned_detect_bboxes)
+            mask = np.array([not np.any(np.all(bbox == assigned_detect_bboxes, axis=1)) for bbox in bboxes])
+            unassigned_detect_bboxes = bboxes[mask]
+            print(f"未分配的检测框数：{unassigned_detect_bboxes.shape[0]}")
+
             for i, student in enumerate(unassigned_students):
-                # 如果 bbox 在 ID Map 范围内与 ID 有交集，若该 ID 失能，则将该 ID 与该 bbox 绑定
-                xmin, ymin, xmax, ymax = (student.bbox[0], student.bbox[1],
-                                          student.bbox[0] + student.bbox[2], student.bbox[1] + student.bbox[3])
-                interested_area = self.id_map[max(0, ymin - (ymax - ymin) // 2):min(360, ymax + (ymax - ymin) // 2),
-                                  max(0, xmin - (xmax - xmin) // 2):min(640, xmax + (xmax - xmin) // 2)]
-                interested_ids = np.unique(interested_area)  # 去重
-                print(f"当前 ID {student.id} 正在与 ID {interested_ids} 进行匹配")
-                # ！！！！！！！！！！！！！！！！！！！！！可能会有多个失活 ID 的情况，所以需要遍历所有失活 ID，找出 IoU 最大的 ID 进行绑定
-                max_iou = 0
-                max_iou_id = -1
-                for id_ in interested_ids:
-                    if id_ == 0:
-                        continue  # 0 代表没有 ID
-                    if not self.used_ids[id_ - 1].active:
-                        # 该 ID 失活，找出 IoU 最大的 ID 进行绑定
-                        iou = bbox_iou(student.bbox, self.used_ids[id_ - 1].bbox)
-                        if iou > max_iou:
-                            max_iou = iou
-                            max_iou_id = id_
-                if max_iou_id != -1:
-                    # 找到了 IoU 最大的 ID，将该 ID 与该 bbox 绑定
-                    self.used_ids[max_iou_id - 1].update(student.bbox, self.current_frame)
-                    self.students.append(self.used_ids[max_iou_id - 1])
-                    self.used_ids[max_iou_id - 1].is_occluded = False
+                if unassigned_detect_bboxes.size == 0:
+                    print("未分配的检测框为空，无法计算距离！")
+                    break
+                # 找出与当前距离最近的未分配的检测框
+                # 计算距离
+                distances = np.sqrt(np.sum((unassigned_detect_bboxes - student.bbox) ** 2, axis=1))  # 计算距离
+                min_distance_index = np.argmin(distances)  # 距离最小的索引
+                # 计算面积
+                area_ratio = student.bbox[2] * student.bbox[3] / (unassigned_detect_bboxes[min_distance_index][2] *
+                                                                  unassigned_detect_bboxes[min_distance_index][3])
+                # 若距离小于学生的高度且面积近似，认为是同一个目标
+                if distances[min_distance_index] < np.sqrt(student.bbox[3]**2 + student.bbox[2]**2) and area_ratio > 0.8:
+                    min_distance_bbox = unassigned_detect_bboxes[min_distance_index]  # 距离最近的检测框
+                    # 更新学生信息
+                    student.update(min_distance_bbox, self.current_frame)
+                    self.update_id_map_and_width_height_map(*min_distance_bbox, student.id)
+                    # 移除该检测框
+                    unassigned_detect_bboxes = np.delete(unassigned_detect_bboxes, min_distance_index, axis=0)
 
     def get_new_id(self):
         """
