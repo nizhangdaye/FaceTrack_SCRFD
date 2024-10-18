@@ -12,9 +12,11 @@ class Student:
         self.bbox = None  # 学生的边界框
         self.frame_num = None  # 第几帧检测到
         self.is_used = False
-        self.active = False  # 是否活跃
+        self.active = False  # 是否活跃  该信息目前没有用到
         self.last_active_frame = None  # 上一次活动的帧数
-        self.is_occluded = False  # 是否被遮挡
+        self.is_occluded = False  # 是否被遮挡  该信息目前没有用到
+        self.state = -1  # -1 不稳定，0 未知，1 坐，2 站立
+        self.student_count_map = np.zeros((360, 640), dtype=np.uint16)  # 表示该像素位置出现的目标（检测框中心）的次数
 
     def release(self):
         """
@@ -32,6 +34,35 @@ class Student:
         self.bbox = bbox
         self.last_active_frame = frame_num
         self.active = True
+        # 更新学生起坐状态
+        self.update_state(self.bbox[0] + self.bbox[2] // 2, self.bbox[1] + self.bbox[3] // 2)
+
+
+    def update_state(self, center_x, center_y):
+        # 确保索引在有效范围内
+        min_y, max_y = max(center_y - 10, 0), min(center_y + 10, self.student_count_map.shape[0])
+        min_x, max_x = max(center_x - 10, 0), min(center_x + 10, self.student_count_map.shape[1])
+
+        self.student_count_map[center_y, center_x] += 1
+
+        if self.state == -1:
+            # 找小范围内的最大值
+            if np.max(self.student_count_map[min_y:max_y, min_x:max_x]) >= 20:
+                self.state = 0  # 稳定
+        elif self.state == 0:
+            max_count = np.max(self.student_count_map[min_y:max_y, min_x:max_x])
+            if max_count < 10:  # 说明学生移动
+                self.state = 1
+                # 判断移动方向 - 此处可添加具体逻辑
+        elif self.state == 1:
+            max_count = np.max(self.student_count_map[min_y:max_y, min_x:max_x])
+            if max_count >= 20:  # 说明学生稳定
+                self.state = 0
+
+    # 可选：添加方法以动态调整阈值
+    def set_thresholds(self, stable_threshold=30, unstable_threshold=10):
+        self.stable_threshold = stable_threshold
+        self.unstable_threshold = unstable_threshold
 
 
 class Classroom:
@@ -113,13 +144,13 @@ class Classroom:
                 # 计算面积
                 area_ratio = student.bbox[2] * student.bbox[3] / (unassigned_detect_bboxes[min_distance_index][2] *
                                                                   unassigned_detect_bboxes[min_distance_index][3])
-                # 若距离小于学生的高度且面积近似，认为是同一个目标
-                if distances[min_distance_index] < np.sqrt(student.bbox[3]**2 + student.bbox[2]**2) and area_ratio > 0.8:
+                # 若距离小于人脸框的对角线，且面积近似，认为是同一个目标
+                if distances[min_distance_index] < np.sqrt(student.bbox[3]**2 + student.bbox[2]**2) // 3 * 2 and area_ratio > 0.9:
                     min_distance_bbox = unassigned_detect_bboxes[min_distance_index]  # 距离最近的检测框
                     # 更新学生信息
                     student.update(min_distance_bbox, self.current_frame)
                     self.update_id_map_and_width_height_map(*min_distance_bbox, student.id)
-                    # 移除该检测框
+                    # 从未分配的检测框列表中移除该检测框
                     unassigned_detect_bboxes = np.delete(unassigned_detect_bboxes, min_distance_index, axis=0)
 
     def get_new_id(self):

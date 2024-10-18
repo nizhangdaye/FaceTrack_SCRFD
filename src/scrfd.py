@@ -144,20 +144,31 @@ class SCRFD():
 
         return bboxes, kpss[indices], scores[indices]
 
-    def draw(self, srcimg: np.ndarray, bboxes: np.ndarray, id: np.ndarray, kpss: np.ndarray = None, ):
+    def draw(self, srcimg: np.ndarray, bboxes: np.ndarray, id: np.ndarray, states: np.ndarray, kpss: np.ndarray = None):
         """
         根据检测结果在原始图片上绘制人脸检测的框和关键点
         :param srcimg: 原始图片
         :param bboxes: 检测到的边界框
         :param kpss: 检测到的关键点
         :param id: 人脸ID
+        :param states: 状态信息
         :return: 返回绘制了检测结果的图片
         """
         for i in range(bboxes.shape[0]):
-            xmin, ymin, xamx, ymax = int(bboxes[i, 0]), int(bboxes[i, 1]), int(bboxes[i, 0] + bboxes[i, 2]), int(
-                bboxes[i, 1] + bboxes[i, 3])
-            # 绘制边界框
-            cv2.rectangle(srcimg, (xmin, ymin), (xamx, ymax), (0, 0, 255), thickness=1)
+            xmin, ymin, xamx, ymax = (
+                int(bboxes[i, 0]),
+                int(bboxes[i, 1]),
+                int(bboxes[i, 0] + bboxes[i, 2]),
+                int(bboxes[i, 1] + bboxes[i, 3]),
+            )
+            # 根据状态绘制边界框
+            if states[i] == 0:
+                color = (0, 0, 255)  # 红色框
+            elif states[i] == 1:
+                color = (255, 0, 0)  # 蓝色框
+            elif states[i] == -1:
+                color = (0, 255, 0)  # 默认绿色框，可以根据需要调整
+            cv2.rectangle(srcimg, (xmin, ymin), (xamx, ymax), color, thickness=1)
             if kpss is not None:
                 # 绘制关键点
                 for j in range(5):
@@ -165,6 +176,7 @@ class SCRFD():
             # 绘制 ID
             cv2.putText(srcimg, str(round(id[i], 3)), (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0),
                         thickness=1)
+
         return srcimg
 
 

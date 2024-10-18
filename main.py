@@ -95,8 +95,8 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
             print(f"更新教室用时：{(time.time() - start_time) * 1000:.3f}ms")
             # -----------------------------------------------绘制人脸框------------------------------------#
             start_time = time.time()
-            boxes, ids = zip(*[(student.bbox, student.id) for student in classroom.students])
-            detector.draw(srcimg, np.array(boxes), np.array(ids))  # 绘制人脸框
+            boxes, ids, states = zip(*[(student.bbox, student.id, student.state) for student in classroom.students])
+            detector.draw(srcimg, np.array(boxes), np.array(ids), np.array(states))  # 绘制人脸框
             cv2.imshow('Deep learning object detection in OpenCV', srcimg)  # 显示检测结果
             print(f"绘制并显示用时：{(time.time() - start_time) * 1000:.3f}ms")
             # -----------------------------------------------保存视频--------------------------------------#
@@ -128,7 +128,7 @@ def main(input_path, onnxmodel_path, result_dir=Path("result"), prob_threshold=0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=str, default="data/理想场景/正面场景1.mp4", help="input image or video path")
+    parser.add_argument("--input", type=str, default="data/理想场景/正面显示场景.mp4", help="input image or video path")
     parser.add_argument("--onnxmodel", type=str, default="weights/scrfd_10g_kps.onnx", help="onnx model path")
     parser.add_argument("--prob_threshold", type=float, default=0.5, help="face detection probability threshold")
     parser.add_argument("--nms_threshold", type=float, default=0.4, help="non-maximum suppression threshold")
