@@ -87,6 +87,7 @@ class Classroom:
         # 常规情况：逐个检测框与 ID Map 进行匹配
         unassigned_students = []
         assigned_detect_bboxes = []
+        start_time = time.time()
         for i, student in enumerate(self.students):
             # 检测 student 周围的检测框
             xmin, ymin, xmax, ymax = (student.bbox[0], student.bbox[1],
@@ -94,8 +95,9 @@ class Classroom:
             x1, y1, x2, y2 = (max(0, xmin - (xmax - xmin) // 2), max(0, ymin - (ymax - ymin) // 2),
                               min(640, xmax + (xmax - xmin) // 2), min(360, ymax + (ymax - ymin) // 2))
             # 找出与感兴趣区域有交集的检测框
-            interested_bboxes = bboxes[np.where((bboxes[:, 0] >= x1) | (bboxes[:, 1] >= y1) |
-                                                (bboxes[:, 2] <= x2) | (bboxes[:, 3] <= y2))]
+            interested_bboxes = bboxes[(bboxes[:, 0] < x2) & (bboxes[:, 1] < y2) &
+                                       (bboxes[:, 0] + bboxes[:, 2] > x1) & (bboxes[:, 1] + bboxes[:, 3] > y1)]
+
             # 将有交集的检测框与感兴趣区域进行 IoU 计算，找出 IoU 最大的检测框
             max_iou = 0
             max_iou_bbox = None
@@ -104,6 +106,8 @@ class Classroom:
                 if iou > max_iou:
                     max_iou = iou
                     max_iou_bbox = bbox
+                    if max_iou >= iou_threshold:
+                        break
             if max_iou > iou_threshold:
                 # 找到了 IoU 最大的检测框，将该检测框与学生绑定
                 student.update(max_iou_bbox, self.current_frame)
@@ -114,8 +118,10 @@ class Classroom:
                 print(f"Student {student.id} is occluded")
                 student.is_occluded = True
                 unassigned_students.append(student)
+        print(f"匹配时间：{(time.time() - start_time) * 1000:.3f} ms")
 
         # 新目标检测框ID赋值(即没有匹配到ID的目标框)
+        start_time = time.time()
         if not self.students:
             unassigned_bboxes = bboxes
             for bbox in unassigned_bboxes:
@@ -152,6 +158,7 @@ class Classroom:
                     self.update_id_map_and_width_height_map(*min_distance_bbox, student.id)
                     # 从未分配的检测框列表中移除该检测框
                     unassigned_detect_bboxes = np.delete(unassigned_detect_bboxes, min_distance_index, axis=0)
+            print(f"未匹配 ID 再分配时间：{(time.time() - start_time) * 1000:.3f} ms")
 
     def get_new_id(self):
         """
