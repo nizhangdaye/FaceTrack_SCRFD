@@ -162,12 +162,18 @@ class SCRFD():
                 int(bboxes[i, 1] + bboxes[i, 3]),
             )
             # 根据状态绘制边界框
-            if states[i] == 0:
-                color = (0, 0, 255)  # 红色框
+            # 假设 states 是一个包含状态的列表或数组
+            if states[i] == -1:
+                color = (255, 255, 255)  # 白色框，表示未知状态
+            elif states[i] == 0:
+                color = (0, 0, 255)  # 红色框，表示稳定
             elif states[i] == 1:
-                color = (255, 0, 0)  # 蓝色框
-            elif states[i] == -1:
-                color = (0, 255, 0)  # 默认绿色框，可以根据需要调整
+                color = (0, 255, 0)  # 绿色框，表示学生移动
+            elif states[i] == 2:
+                color = (0, 0, 0)  # 黑色框，表示起立
+            elif states[i] == 3:
+                color = (255, 0, 0)  # 蓝色框，表示坐下
+
             cv2.rectangle(srcimg, (xmin, ymin), (xamx, ymax), color, thickness=1)
             if kpss is not None:
                 # 绘制关键点
@@ -182,36 +188,35 @@ class SCRFD():
 
 def sort_faces_by_row(bboxes):
     # bboxes: 每个人脸的框，形状为(N, 4), 每个元素为 [x_min, y_min, x_max, y_max]
-
     # 获取每个bbox的y_min值
     y_min_vals = bboxes[:, 1]
-
-    # 设置一个y坐标的阈值，用于区分每一排
-    y_threshold = 35  # 可根据具体图片调整阈值
-
-    # 按y_min排序
+    # 按y_min排序，从高到低
     sorted_indices = np.argsort(-y_min_vals)
     sorted_bboxes = bboxes[sorted_indices]
 
     rows = []
     current_row = []
     current_y = sorted_bboxes[0, 1]
+    current_threshold = sorted_bboxes[0, 3]
 
     for bbox in sorted_bboxes:
-        if abs(bbox[1] - current_y) > y_threshold:
+        if abs(current_y - bbox[1]) > current_threshold * 1.15:
+            # print(f"current_threshold = {current_threshold}")
+            # print(f"currenty - ymin = {current_y} - {bbox[1]} = {current_y - bbox[1]}")
             # 如果超过阈值，认为是新的一排
             rows.append(current_row)
             current_row = []
             current_y = bbox[1]
+        current_threshold = bbox[3]
         current_row.append(bbox)
-
-    # 别忘了最后一排也要加入
+    # 最后一排也要加入
     if current_row:
         rows.append(current_row)
 
     # 按每一排的x_min进行排序
     face_order = []
     for row in rows:
+        # print(f"row = {row}")
         row = sorted(row, key=lambda x: x[0])  # 按x_min从左到右排序
         face_order.extend(row)
 
