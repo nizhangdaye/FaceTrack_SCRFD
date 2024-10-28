@@ -51,6 +51,7 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
         # ----------------------------------------------------------------------------------------------#
 
         output_path = result_dir / (file_path.stem + ".png")
+        output_path = output_path.with_suffix(f".{int(time.time())}.png")  # 加上时间戳
         cv2.imwrite(str(output_path), img)
 
         print(f"[INFO] Image saved to: {output_path}")
@@ -128,7 +129,7 @@ def main(input_path, onnxmodel_path, result_dir=Path("result"), prob_threshold=0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=str, default="data/理想场景/正面显示场景.mp4", help="input image or video path")
+    parser.add_argument("--input", type=str, default="data/正面教室.mp4", help="input image or video path")
     parser.add_argument("--onnxmodel", type=str, default="weights/scrfd_10g_kps.onnx", help="onnx model path")
     parser.add_argument("--prob_threshold", type=float, default=0.5, help="face detection probability threshold")
     parser.add_argument("--nms_threshold", type=float, default=0.4, help="non-maximum suppression threshold")
