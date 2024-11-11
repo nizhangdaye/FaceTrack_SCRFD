@@ -8,6 +8,7 @@ import time
 
 class Student:
     def __init__(self, student_id):
+        self.student_state_region = {}  # 学生的坐、站区域
         self.last_state = None
         self.state_flag = None
         self.id = student_id  # 学生 ID
@@ -38,6 +39,51 @@ class Student:
         self.active = True
         # 更新学生起坐状态
         self.update_state(self.bbox[0] + self.bbox[2] // 2, self.bbox[1] + self.bbox[3] // 2, self.bbox[3])
+        # 更新坐、站的区域
+        self.update_state_region(self.student_count_map, self.bbox, self.state)
+
+    def update_state_region(self, state_map, bbox, state):
+        """
+        更新学生的坐、站区域
+        :param state_map: 学生的状态地图
+        :param bbox: 学生的边界框
+        :param state: 学生的状态
+        """
+        if state not in [2, 3]:
+            return
+        xmin, ymin, w, h = bbox
+        xmax, ymax = xmin + w, ymin + h
+
+        # 获取 bbox 附近的区域
+        nearby_region = state_map[max(0, ymin - 10):min(ymax + 10, state_map.shape[0]),
+                        max(0, xmin - 10):min(xmax + 10, state_map.shape[1])]
+
+        # 找到数值大于 5 的位置
+        sitting_area = np.argwhere(nearby_region > 5)
+
+        # 更新区域的边界
+        if sitting_area.size > 0:
+            # 将 nearby_region 的局部坐标转换为全局坐标
+            # 转换为标量
+            y_min, x_min = np.min(sitting_area, axis=0).item(0) + max(0, ymin - 10), np.min(sitting_area, axis=1).item(
+                0) + max(0, xmin - 10)
+            y_max, x_max = np.max(sitting_area, axis=0).item(0) + max(0, ymin - 10), np.max(sitting_area, axis=1).item(
+                0) + max(0, xmin - 10)
+
+            new_square = [y_min, x_min, y_max, x_max]
+            print(f"更新学生 {self.id} 的 {state} 区域：{new_square}")
+
+            # 检查是否已有该状态的区域，若有则扩展范围
+            if state in self.student_state_region:
+                old_square = self.student_state_region[state]
+                updated_square = [
+                    min(old_square[0], new_square[0]), min(old_square[1], new_square[1]),
+                    max(old_square[2], new_square[2]), max(old_square[3], new_square[3])
+                ]
+                self.student_state_region[state] = updated_square
+            else:
+                # 如果该状态还未记录，直接添加新区域
+                self.student_state_region[state] = new_square
 
     def update_state(self, center_x, center_y, box_height):
         # 确保索引在有效范围内
@@ -92,7 +138,6 @@ class Classroom:
         if self.current_frame % 900 == 0:
             # 重置教室
             self.__init__()
-
 
         self.current_frame += 1
 

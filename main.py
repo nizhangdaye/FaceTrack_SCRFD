@@ -4,9 +4,11 @@ import numpy as np
 from pathlib import Path
 import argparse
 import time
+from datetime import datetime
 
+from ultralytics import YOLO
 import src.scrfd as scrfd
-from src.scrfd import SCRFD
+from src.scrfd import SCRFD, draw
 from src.utils import is_image_file, is_video_file, print_progress_bar
 from src.classroom import Classroom
 
@@ -17,7 +19,7 @@ face_trackers = {}  # 存储每个ID对应的追踪器
 face_tracker_ids = {}  # 存储每个追踪器对应的ID
 
 
-def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False) -> None:
+def process_file(file_path: Path, detector: YOLO, result_dir: Path, save=False) -> None:
     classroom = Classroom()  # 追踪器初始化
 
     if is_image_file(str(file_path)):
@@ -51,7 +53,8 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
         # ----------------------------------------------------------------------------------------------#
 
         output_path = result_dir / (file_path.stem + ".png")
-        output_path = output_path.with_suffix(f".{int(time.time())}.png")  # 加上时间戳
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        output_path = output_path.with_suffix(f".{current_date}.png")  # 加上时间戳
         cv2.imwrite(str(output_path), img)
 
         print(f"[INFO] Image saved to: {output_path}")
@@ -69,7 +72,8 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
 
         if save:
             output_path = result_dir / (file_path.stem + ".mp4")
-            output_path = output_path.with_suffix(f".{int(time.time())}.mp4")
+            current_date = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+            output_path = output_path.with_suffix(f".{current_date}.mp4")
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 四字符编码
             video = cv2.VideoWriter(str(output_path), fourcc, cap.get(cv2.CAP_PROP_FPS), (640, 360))
 
@@ -84,7 +88,22 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
 
             # -----------------------------------------------检测人脸------------------------------------#
             start_time = time.time()
-            bboxes, kpss, scores = detector.detect(srcimg)
+            results = detector.predict(srcimg, show=False, save=False, save_txt=False, classes=[0], visualize=False,
+                                       device='0')
+            bboxes = []
+
+            for result in results:
+                for box in result.boxes:
+                    # 提取边界框的坐标并构建为 [x_min, y_min, x_max, y_max] 的格式
+                    x_min = int(box.xyxy[0][0])
+                    y_min = int(box.xyxy[0][1])
+                    w = int(box.xyxy[0][2] - box.xyxy[0][0])
+                    h = int(box.xyxy[0][3] - box.xyxy[0][1])
+
+                    # 添加到 bboxes 列表中
+                    bboxes.append([x_min, y_min, w, h])
+            bboxes = np.array(bboxes)
+
             print("-----------------------------------------------")
             print(f"检测用时：{(time.time() - start_time) * 1000:.3f}ms")
             # ----------------------------------------------对人脸进行排序--------------------------------#
@@ -97,8 +116,7 @@ def process_file(file_path: Path, detector: SCRFD, result_dir: Path, save=False)
             print(f"更新教室用时：{(time.time() - start_time) * 1000:.3f}ms")
             # -----------------------------------------------绘制人脸框------------------------------------#
             start_time = time.time()
-            boxes, ids, states = zip(*[(student.bbox, student.id, student.state) for student in classroom.students])
-            detector.draw(srcimg, np.array(boxes), np.array(ids), np.array(states))  # 绘制人脸框
+            draw(srcimg, classroom.students)  # 绘制人脸框
             cv2.imshow('Deep learning object detection in OpenCV', srcimg)  # 显示检测结果
             print(f"绘制并显示用时：{(time.time() - start_time) * 1000:.3f}ms")
             # -----------------------------------------------保存视频--------------------------------------#
@@ -118,7 +136,8 @@ def main(input_path, onnxmodel_path, result_dir=Path("result"), prob_threshold=0
     if not os.path.exists(onnxmodel_path):
         print("[ERROR] Model File or Param File does not exist")
         return
-    detector = SCRFD(onnxmodel_path, prob_threshold, nms_threshold)
+
+    detector = YOLO("weights/yolov10n.pt")
 
     if os.path.isfile(input_path):  # 如果输入的是文件
         process_file(Path(input_path), detector, Path(result_dir), save=save)

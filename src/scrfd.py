@@ -144,46 +144,52 @@ class SCRFD():
 
         return bboxes, kpss[indices], scores[indices]
 
-    def draw(self, srcimg: np.ndarray, bboxes: np.ndarray, id: np.ndarray, states: np.ndarray, kpss: np.ndarray = None):
-        """
-        根据检测结果在原始图片上绘制人脸检测的框和关键点
-        :param srcimg: 原始图片
-        :param bboxes: 检测到的边界框
-        :param kpss: 检测到的关键点
-        :param id: 人脸ID
-        :param states: 状态信息
-        :return: 返回绘制了检测结果的图片
-        """
-        for i in range(bboxes.shape[0]):
-            xmin, ymin, xamx, ymax = (
-                int(bboxes[i, 0]),
-                int(bboxes[i, 1]),
-                int(bboxes[i, 0] + bboxes[i, 2]),
-                int(bboxes[i, 1] + bboxes[i, 3]),
-            )
-            # 根据状态绘制边界框
-            # 假设 states 是一个包含状态的列表或数组
-            if states[i] == -1:
-                color = (255, 255, 255)  # 白色框，表示未知状态
-            elif states[i] == 0:
-                color = (0, 0, 255)  # 红色框，表示稳定
-            elif states[i] == 1:
-                color = (0, 255, 0)  # 绿色框，表示学生移动
-            elif states[i] == 2:
-                color = (0, 0, 0)  # 黑色框，表示起立
-            elif states[i] == 3:
-                color = (255, 0, 0)  # 蓝色框，表示坐下
 
-            cv2.rectangle(srcimg, (xmin, ymin), (xamx, ymax), color, thickness=1)
-            if kpss is not None:
-                # 绘制关键点
-                for j in range(5):
-                    cv2.circle(srcimg, (int(kpss[i, j, 0]), int(kpss[i, j, 1])), 1, (0, 255, 0), thickness=-1)
-            # 绘制 ID
-            cv2.putText(srcimg, str(round(id[i], 3)), (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0),
-                        thickness=1)
+def draw(srcimg: np.ndarray, students: list):
+    """
+    根据检测结果在原始图片上绘制人脸检测的框和关键点
+    :param srcimg: 原始图片
+    :param students: 学生对象列表
+    :return: 返回绘制了检测结果的图片
+    """
+    bboxes = np.array([student.bbox for student in students])
+    ids = np.array([student.id for student in students])
+    states = np.array([student.state for student in students])
+    student_state_region = [student.student_state_region for student in students]
 
-        return srcimg
+    for i in range(bboxes.shape[0]):
+        xmin, ymin, xamx, ymax = (
+            int(bboxes[i, 0]),
+            int(bboxes[i, 1]),
+            int(bboxes[i, 0] + bboxes[i, 2]),
+            int(bboxes[i, 1] + bboxes[i, 3]),
+        )
+
+        # 根据状态绘制边界框颜色
+        if states[i] == -1:
+            color = (255, 255, 255)  # 白色框，表示未知状态
+        elif states[i] == 0:
+            color = (0, 0, 255)  # 红色框，表示稳定
+        elif states[i] == 1:
+            color = (0, 255, 0)  # 绿色框，表示学生移动
+        elif states[i] == 2:
+            color = (0, 0, 0)  # 黑色框，表示起立
+        elif states[i] == 3:
+            color = (255, 0, 0)  # 蓝色框，表示坐下
+
+        # 绘制边界框
+        cv2.rectangle(srcimg, (xmin, ymin), (xamx, ymax), color, thickness=1)
+        # 绘制 ID
+        cv2.putText(srcimg, str(ids[i]), (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
+        # 只绘制 ID 为 6、7、12、14 的 student_state_region
+        if ids[i] in [6, 7, 12, 14]:
+            for state, region in student_state_region[i].items():
+                y_min, x_min, y_max, x_max = region
+                cv2.rectangle(srcimg, (x_min, y_min), (x_max, y_max), color, thickness=1)
+                print(f"id = {ids[i]}, bbox = {bboxes[i]}, state = {state}, region = {region}")
+
+    return srcimg
 
 
 def sort_faces_by_row(bboxes):
