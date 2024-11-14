@@ -129,6 +129,16 @@ class Classroom:
         self.max_inactive_frames = max_inactive_frames  # 如果在 max_inactive_frames 内没有更新，则认为学生离开了
         self.interested_area = 50
 
+    def reset(self):
+        """
+        重置教室
+        """
+        self.id_map = np.zeros((640, 360), dtype=np.uint16)
+        self.id_width_height_map = np.zeros((640, 360), dtype=np.float32)
+        self.students = []
+        self.current_frame = 0
+        self.used_ids = [Student(i) for i in range(60)]
+
     def update(self, bboxes: np.ndarray) -> None:
         """
         更新学生信息
@@ -137,7 +147,7 @@ class Classroom:
         # 每隔 30 秒
         if self.current_frame % 900 == 0:
             # 重置教室
-            self.__init__()
+            self.reset()
 
         self.current_frame += 1
 
@@ -171,6 +181,7 @@ class Classroom:
                 # 找到了 IoU 最大的检测框，将该检测框与学生绑定
                 student.update(max_iou_bbox, self.current_frame)
                 self.update_id_map_and_width_height_map(*max_iou_bbox, student.id)
+                # 热力图更新，检测框的中心位置加 1
                 assigned_detect_bboxes.append(max_iou_bbox)
             else:
                 # 没有找到 IoU 最大的检测框，将该学生标记为遮挡

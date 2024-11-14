@@ -77,6 +77,7 @@ def process_file(file_path: Path, detector: YOLO, result_dir: Path, save=False) 
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 四字符编码
             video = cv2.VideoWriter(str(output_path), fourcc, cap.get(cv2.CAP_PROP_FPS), (640, 360))
 
+        heat_map = np.zeros((360, 640), dtype=np.float32)
         while cap.isOpened():
             ret, srcimg = cap.read()  # 每次读取一帧
 
@@ -99,6 +100,8 @@ def process_file(file_path: Path, detector: YOLO, result_dir: Path, save=False) 
                     y_min = int(box.xyxy[0][1])
                     w = int(box.xyxy[0][2] - box.xyxy[0][0])
                     h = int(box.xyxy[0][3] - box.xyxy[0][1])
+
+                    heat_map[y_min + h // 2, x_min + w // 2,] += 1  # 热力图更新
 
                     # 添加到 bboxes 列表中
                     bboxes.append([x_min, y_min, w, h])
@@ -130,6 +133,14 @@ def process_file(file_path: Path, detector: YOLO, result_dir: Path, save=False) 
         if save:
             video.release()  # 释放视频写入对象
             print(f"[INFO] Video saved to: {output_path}")
+            # 保存热力图
+            min_val = np.min(heat_map)
+            max_val = np.max(heat_map)
+            print(f"min_val: {min_val}, max_val: {max_val}")
+            normalized_heat_map = (heat_map - min_val) * 255.0 / (max_val - min_val)
+            heat_map = cv2.normalize(normalized_heat_map, None, 0, 255, cv2.NORM_MINMAX)  # 归一化
+            heat_map = cv2.applyColorMap(heat_map.astype(np.uint8), cv2.COLORMAP_HOT)  # 颜色映射
+            cv2.imwrite(str(result_dir / "heat_map.png"), heat_map)
 
 
 def main(input_path, onnxmodel_path, result_dir=Path("result"), prob_threshold=0.5, nms_threshold=0.4, save=False):
