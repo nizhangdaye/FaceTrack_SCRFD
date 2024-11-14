@@ -140,6 +140,16 @@ class Classroom:
         self.current_frame = 0
         self.used_ids = [Student(i) for i in range(60)]
 
+    def reset(self):
+        """
+        重置教室
+        """
+        self.id_map = np.zeros((640, 360), dtype=np.uint16)
+        self.id_width_height_map = np.zeros((640, 360), dtype=np.float32)
+        self.students = []
+        self.current_frame = 0
+        self.used_ids = [Student(i) for i in range(60)]
+
     def update(self, bboxes: np.ndarray) -> None:
         """
         更新学生信息
