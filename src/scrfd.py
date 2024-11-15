@@ -182,12 +182,12 @@ def draw(srcimg: np.ndarray, students: list):
         # 绘制 ID
         cv2.putText(srcimg, str(ids[i]), (xmin, ymin - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
-        # 只绘制 ID 为 6、7、12、14 的 student_state_region
-        if ids[i] in [6, 7, 12, 14]:
-            for state, region in student_state_region[i].items():
-                y_min, x_min, y_max, x_max = region
-                cv2.rectangle(srcimg, (x_min, y_min), (x_max, y_max), color, thickness=1)
-                print(f"id = {ids[i]}, bbox = {bboxes[i]}, state = {state}, region = {region}")
+        # # 只绘制 ID 为 6、7、12、14 的 student_state_region
+        # if ids[i] in [6, 7, 12, 14]:
+        #     for state, region in student_state_region[i].items():
+        #         y_min, x_min, y_max, x_max = region
+        #         cv2.rectangle(srcimg, (x_min, y_min), (x_max, y_max), color, thickness=1)
+        #         print(f"id = {ids[i]}, bbox = {bboxes[i]}, state = {state}, region = {region}")
 
     return srcimg
 
