@@ -17,6 +17,32 @@ initial_face_boxes = []  # 存储初始检测框
 clustered_rects = []  # 存储聚类后的检测框
 face_trackers = {}  # 存储每个ID对应的追踪器
 face_tracker_ids = {}  # 存储每个追踪器对应的ID
+import cv2
+import numpy as np
+
+
+def detect_seat_regions(heat_map, threshold=10):
+    heat_map = cv2.GaussianBlur(heat_map, (3, 3), 0)  # 滤波
+    heat_map = cv2.convertScaleAbs(heat_map)
+    # 二值化处理，找到热力图中活跃区域
+    _, binary_map = cv2.threshold(heat_map, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # 查找轮廓
+    contours, _ = cv2.findContours(binary_map.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    seat_regions = []
+
+    for contour in contours:
+        # 忽略过小的区域，以避免噪声
+        if cv2.contourArea(contour) < 1:  # 根据需要调整面积阈值
+            continue
+        # 计算坐标
+        x, y, w, h = cv2.boundingRect(contour)
+        # 左上角坐标 (x, y) 和右下角坐标 (x + w, y + h)
+        seat_regions.append(((x, y), (x + w, y + h)))
+    print(f"检测到{len(seat_regions)}个座位区域")
+
+    return seat_regions
 
 
 def process_file(file_path: Path, detector: YOLO, result_dir: Path, save=False) -> None:
@@ -78,7 +104,10 @@ def process_file(file_path: Path, detector: YOLO, result_dir: Path, save=False) 
             video = cv2.VideoWriter(str(output_path), fourcc, cap.get(cv2.CAP_PROP_FPS), (640, 360))
 
         heat_map = np.zeros((360, 640), dtype=np.float32)
+        seat_regions = None
+
         while cap.isOpened():
+            processed_frames += 1
             ret, srcimg = cap.read()  # 每次读取一帧
 
             if not ret:
@@ -92,7 +121,6 @@ def process_file(file_path: Path, detector: YOLO, result_dir: Path, save=False) 
             results = detector.predict(srcimg, show=False, save=False, save_txt=False, classes=[0], visualize=False,
                                        device='0')
             bboxes = []
-
             for result in results:
                 for box in result.boxes:
                     # 提取边界框的坐标并构建为 [x_min, y_min, x_max, y_max] 的格式
@@ -101,7 +129,7 @@ def process_file(file_path: Path, detector: YOLO, result_dir: Path, save=False) 
                     w = int(box.xyxy[0][2] - box.xyxy[0][0])
                     h = int(box.xyxy[0][3] - box.xyxy[0][1])
 
-                    if heat_map[y_min + h // 2, x_min + w // 2,] < 255:
+                    if heat_map[y_min + h // 2, x_min + w // 2,] < 60:
                         heat_map[y_min + h // 2, x_min + w // 2,] += 1  # 热力图更新  不能一直累加
 
                     # 添加到 bboxes 列表中
@@ -110,18 +138,19 @@ def process_file(file_path: Path, detector: YOLO, result_dir: Path, save=False) 
             print("-----------------------------------------------")
             print(f"检测用时：{(time.time() - start_time) * 1000:.3f}ms")
 
-
+            # ----------------------------------------------座位确定-------#
+            start_time = time.time()
             # heat_map 不能一直累加
-            if processed_frames % 30 == 0:
-                # 对 heat_map 进行减小处理，减去 10
-                heat_map = np.maximum(heat_map - 5, 0)
-                # 滤波
-                heat_map = cv2.GaussianBlur(heat_map, (3, 3), 0)
+            if processed_frames % 900 == 0:
+                heat_map = np.maximum(heat_map - 2, 0)
+                # # 将图像保存到本地heat_map 文件夹下，用帧数命名，格式为npy
+                # np.save(f"heat_map/{processed_frames}.npy", heat_map)
 
+            if processed_frames % 60 == 0:
                 classroom.heat_map = heat_map
+                seat_regions = detect_seat_regions(heat_map)
 
-            # 每过 30 帧，heat_map 进行一次聚类
-
+            print(f"座位确定用时：{(time.time() - start_time) * 1000:.3f}ms")
             # ----------------------------------------------对人脸进行排序--------------------------------#
             start_time = time.time()
             bboxes = scrfd.sort_faces_by_row(bboxes)
@@ -133,13 +162,14 @@ def process_file(file_path: Path, detector: YOLO, result_dir: Path, save=False) 
             # -----------------------------------------------绘制人脸框------------------------------------#
             start_time = time.time()
             draw(srcimg, classroom.students)  # 绘制人脸框
+            if seat_regions:
+                for region in seat_regions:
+                    cv2.rectangle(srcimg, region[0], region[1], (0, 255, 0), 2)  # 绘制座位区域
             cv2.imshow('Deep learning object detection in OpenCV', srcimg)  # 显示检测结果
             print(f"绘制并显示用时：{(time.time() - start_time) * 1000:.3f}ms")
             # -----------------------------------------------保存视频--------------------------------------#
             if save:
                 video.write(srcimg)
-
-            processed_frames += 1
 
             if cv2.waitKey(1) & 0xFF == ord('q'):  # 按 'q' 键退出
                 break
@@ -152,10 +182,14 @@ def process_file(file_path: Path, detector: YOLO, result_dir: Path, save=False) 
             min_val = np.min(heat_map)
             max_val = np.max(heat_map)
             print(f"min_val: {min_val}, max_val: {max_val}")
+
             normalized_heat_map = (heat_map - min_val) * 255.0 / (max_val - min_val)
             heat_map = cv2.normalize(normalized_heat_map, None, 0, 255, cv2.NORM_MINMAX)  # 归一化
             heat_map = cv2.applyColorMap(heat_map.astype(np.uint8), cv2.COLORMAP_HOT)  # 颜色映射
+
             cv2.imwrite(str(result_dir / "heat_map.png"), heat_map)
+
+            print(f"座位个数：{len(seat_regions)}")
 
 
 def main(input_path, onnxmodel_path, result_dir=Path("result"), prob_threshold=0.5, nms_threshold=0.4, save=False):

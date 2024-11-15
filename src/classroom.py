@@ -39,8 +39,8 @@ class Student:
         self.active = True
         # 更新学生起坐状态
         self.update_state(self.bbox[0] + self.bbox[2] // 2, self.bbox[1] + self.bbox[3] // 2, self.bbox[3])
-        # 更新坐、站的区域
-        self.update_state_region(self.student_count_map, self.bbox, self.state)
+        # # 更新坐、站的区域
+        # self.update_state_region(self.student_count_map, self.bbox, self.state)
 
     def update_state_region(self, state_map, bbox, state):
         """
@@ -129,16 +129,6 @@ class Classroom:
         self.max_inactive_frames = max_inactive_frames  # 如果在 max_inactive_frames 内没有更新，则认为学生离开了
         self.interested_area = 50
         self.heat_map = None  # 学生的热力图
-
-    def reset(self):
-        """
-        重置教室
-        """
-        self.id_map = np.zeros((640, 360), dtype=np.uint16)
-        self.id_width_height_map = np.zeros((640, 360), dtype=np.float32)
-        self.students = []
-        self.current_frame = 0
-        self.used_ids = [Student(i) for i in range(60)]
 
     def reset(self):
         """
