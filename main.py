@@ -25,8 +25,8 @@ def detect_seat_regions(heat_map, threshold=170):
     max_val = np.max(heat_map)
     heat_map = (heat_map - min_val) * 255.0 / (max_val - min_val)
 
-    # 腐蚀
-    heat_map = cv2.erode(heat_map, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
+    # # 腐蚀
+    # heat_map = cv2.erode(heat_map, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
     # # 高斯滤波
     # heat_map = cv2.GaussianBlur(heat_map, (3, 3), 0)  # 滤波
     heat_map = cv2.convertScaleAbs(heat_map)
@@ -152,7 +152,7 @@ def process_file(file_path: Path, detector: YOLO, result_dir: Path, save=False) 
                     # 对小范围内的值进行累加
                     heat_map[y_min_range:y_max_range, x_min_range:x_max_range] += 1
 
-                    # 限制累加值不超过60
+                    # 限制累加值不超过255
                     heat_map = np.clip(heat_map, 0, 255)
 
                     # 添加到 bboxes 列表中
