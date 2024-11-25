@@ -18,14 +18,20 @@ clustered_rects = []  # 存储聚类后的检测框
 face_trackers = {}  # 存储每个ID对应的追踪器
 face_tracker_ids = {}  # 存储每个追踪器对应的ID
 import cv2
-import numpy as np
 
 
-def detect_seat_regions(heat_map, threshold=10):
-    heat_map = cv2.GaussianBlur(heat_map, (3, 3), 0)  # 滤波
+def detect_seat_regions(heat_map, threshold=170):
+    min_val = np.min(heat_map)
+    max_val = np.max(heat_map)
+    heat_map = (heat_map - min_val) * 255.0 / (max_val - min_val)
+
+    # 腐蚀
+    heat_map = cv2.erode(heat_map, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
+    # # 高斯滤波
+    # heat_map = cv2.GaussianBlur(heat_map, (3, 3), 0)  # 滤波
     heat_map = cv2.convertScaleAbs(heat_map)
     # 二值化处理，找到热力图中活跃区域
-    _, binary_map = cv2.threshold(heat_map, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    ret, binary_map = cv2.threshold(heat_map, threshold, 255, cv2.THRESH_BINARY)
 
     # 查找轮廓
     contours, _ = cv2.findContours(binary_map.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -121,6 +127,7 @@ def process_file(file_path: Path, detector: YOLO, result_dir: Path, save=False) 
             results = detector.predict(srcimg, show=False, save=False, save_txt=False, classes=[0], visualize=False,
                                        device='0')
             bboxes = []
+
             for result in results:
                 for box in result.boxes:
                     # 提取边界框的坐标并构建为 [x_min, y_min, x_max, y_max] 的格式
@@ -129,24 +136,42 @@ def process_file(file_path: Path, detector: YOLO, result_dir: Path, save=False) 
                     w = int(box.xyxy[0][2] - box.xyxy[0][0])
                     h = int(box.xyxy[0][3] - box.xyxy[0][1])
 
-                    if heat_map[y_min + h // 2, x_min + w // 2,] < 60:
-                        heat_map[y_min + h // 2, x_min + w // 2,] += 1  # 热力图更新  不能一直累加
+                    # 计算中心点
+                    center_x = x_min + w // 2
+                    center_y = y_min + h // 2
+
+                    # 定义小范围的窗口大小，为检测框大小的 1/4
+                    window_size = max(w // 4, 1)
+
+                    # 定义范围
+                    y_min_range = max(center_y - window_size, 0)
+                    y_max_range = min(center_y + window_size + 1, heat_map.shape[0])
+                    x_min_range = max(center_x - window_size, 0)
+                    x_max_range = min(center_x + window_size + 1, heat_map.shape[1])
+
+                    # 对小范围内的值进行累加
+                    heat_map[y_min_range:y_max_range, x_min_range:x_max_range] += 1
+
+                    # 限制累加值不超过60
+                    heat_map = np.clip(heat_map, 0, 255)
 
                     # 添加到 bboxes 列表中
                     bboxes.append([x_min, y_min, w, h])
+
             bboxes = np.array(bboxes)
             print("-----------------------------------------------")
             print(f"检测用时：{(time.time() - start_time) * 1000:.3f}ms")
 
             # ----------------------------------------------座位确定-------#
             start_time = time.time()
-            # heat_map 不能一直累加
-            if processed_frames % 900 == 0:
-                heat_map = np.maximum(heat_map - 2, 0)
-                # # 将图像保存到本地heat_map 文件夹下，用帧数命名，格式为npy
-                # np.save(f"heat_map/{processed_frames}.npy", heat_map)
+            # # heat_map 不能一直累加
+            # if processed_frames % 900 == 0:  # 每 30 秒
+            #     heat_map = np.maximum(heat_map - 100, 0)
+            #     # # 将图像保存到本地heat_map 文件夹下，用帧数命名，格式为npy
+            #     # np.save(f"heat_map/{processed_frames}.npy", heat_map)
 
             if processed_frames % 60 == 0:
+                heat_map = np.maximum(heat_map - 10, 0)
                 classroom.heat_map = heat_map
                 seat_regions = detect_seat_regions(heat_map)
 
@@ -164,7 +189,7 @@ def process_file(file_path: Path, detector: YOLO, result_dir: Path, save=False) 
             draw(srcimg, classroom.students)  # 绘制人脸框
             if seat_regions:
                 for region in seat_regions:
-                    cv2.rectangle(srcimg, region[0], region[1], (0, 255, 0), 2)  # 绘制座位区域
+                    cv2.rectangle(srcimg, region[0], region[1], (0, 255, 0), 1)  # 绘制座位区域
             cv2.imshow('Deep learning object detection in OpenCV', srcimg)  # 显示检测结果
             print(f"绘制并显示用时：{(time.time() - start_time) * 1000:.3f}ms")
             # -----------------------------------------------保存视频--------------------------------------#
