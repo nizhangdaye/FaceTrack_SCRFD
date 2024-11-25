@@ -152,7 +152,7 @@ def process_file(file_path: Path, detector: YOLO, result_dir: Path, save=False) 
                     # 对小范围内的值进行累加
                     heat_map[y_min_range:y_max_range, x_min_range:x_max_range] += 1
 
-                    # 限制累加值不超过60
+                    # 限制累加值不超过255
                     heat_map = np.clip(heat_map, 0, 255)
 
                     # 添加到 bboxes 列表中
